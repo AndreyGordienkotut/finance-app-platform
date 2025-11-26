@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: ${DB_URL_ACC}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: none
+  application:
+    name: account_service
+
+#jwt
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET}
+      expiration: ${JWT_EXPIRATION}
+      refresh-token:
+        expiration: ${JWT_REFRESH_EXPIRATION}
+      cookie-name: jwt_token
+      # DB
+
+server:
+  port: 8081
