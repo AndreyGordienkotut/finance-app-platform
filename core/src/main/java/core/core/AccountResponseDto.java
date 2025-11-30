@@ -1,7 +1,7 @@
-package account_service.account_service.dto;
+package core.core;
 
-import account_service.account_service.model.Currency;
-import account_service.account_service.model.Status;
+import core.core.Currency;
+import core.core.Status;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -16,8 +16,9 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class AccountResponseDto {
     private Long id;
+    private Long userId;
     private Currency currency;
     private BigDecimal balance;
-    private Status status;
+    private StatusAccount status;
     private LocalDateTime createAt;
 }

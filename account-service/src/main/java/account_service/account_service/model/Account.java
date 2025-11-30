@@ -1,11 +1,12 @@
 package account_service.account_service.model;
 
+import core.core.Currency;
+import core.core.StatusAccount;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.IdGeneratorType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -26,7 +27,8 @@ public class Account {
     @Column(nullable = false)
     private BigDecimal balance;
     @Enumerated(EnumType.STRING)
-    private Status status;
+    @Column(name = "status_account")
+    private StatusAccount statusAccount;
     @Column(name = "create_at", nullable = false)
     private LocalDateTime createAt;
 }

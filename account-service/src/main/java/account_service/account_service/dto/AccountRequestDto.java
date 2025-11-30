@@ -1,6 +1,6 @@
 package account_service.account_service.dto;
 
-import account_service.account_service.model.Currency;
+import core.core.Currency;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

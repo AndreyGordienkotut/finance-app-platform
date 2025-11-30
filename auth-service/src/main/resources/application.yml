@@ -20,9 +20,14 @@ spring:
     hibernate:
       ddl-auto: none
   application:
-    name: auth_service
+    name: auth-service
 
 
 
 server:
   port: 8080
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/
