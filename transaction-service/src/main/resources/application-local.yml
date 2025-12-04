@@ -1,14 +1,14 @@
-server:
-  port: 8081
-
 eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka/
 
+
+server:
+  port: 8082
 spring:
   datasource:
-    url: ${DB_URL_ACC}
+    url: ${DB_URL_TRAN}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -17,9 +17,8 @@ spring:
     hibernate:
       ddl-auto: none
   application:
-    name: account-service
+    name: transaction-service
 
-#jwt
 application:
   security:
     jwt:

@@ -38,23 +38,32 @@ public class TransactionService {
                 dto.getFromAccountId(), dto.getToAccountId(), dto.getAmount(), userId);
         Transaction tx = createPending(dto, from.getCurrency());
         try {
+            log.info("TX {} validating accounts", tx.getId());
             validateAccounts(from, to, dto, userId);
             boolean debitSucceeded = false;
             try {
+                log.info("TX {} calling debit for account {}", tx.getId(), from.getId());
                 accountClient.debit(from.getId(), dto.getAmount(),tx.getId());
+                log.info("TX {} debit succeeded: from={}, amount={}", tx.getId(), from.getId(), dto.getAmount());
                 debitSucceeded = true;
                 accountClient.credit(to.getId(), dto.getAmount(),tx.getId());
+                log.info("TX {} credit succeeded: to={}, amount={}", tx.getId(), to.getId(), dto.getAmount());
                 updateStatus(tx.getId(), Status.SUCCESS, null);
                 Transaction updated = transactionRepository.findById(tx.getId()).orElseThrow();
+                log.info("TX {} finished SUCCESS", tx.getId());
                 return convertToDto(updated);
 
+
             } catch (FeignException e) {
-                log.warn("Remote call failed: status={}, msg={}, body={}", e.status(), e.getMessage(), e.contentUTF8());
+                log.warn("TX {} remote call failed: {}", tx.getId(), e.getMessage());
 
                 if (debitSucceeded) {
-                        Transaction updated = transactionRepository.findById(tx.getId()).orElseThrow();
-                        return convertToDto(updated);
+                    log.warn("TX {} credit failed, starting rollback", tx.getId());
 
+                    compensate(tx.getId(), from.getId(), dto.getAmount());
+
+                    Transaction updated = transactionRepository.findById(tx.getId()).orElseThrow();
+                    return convertToDto(updated);
                 } else {
                     updateStatus(tx.getId(), Status.FAILED, "Debit failed: " + e.getMessage());
                     throw new BadRequestException("Debit failed: " + e.getMessage());
@@ -62,10 +71,12 @@ public class TransactionService {
             }
 
         } catch (BadRequestException e) {
+            log.warn("TX {} validation failed with status {}: {}", tx.getId(),Status.FAILED, e.getMessage());
             updateStatus(tx.getId(), Status.FAILED, e.getMessage());
             throw e;
 
         } catch (Exception e) {
+            log.error("TX {} unexpected error with status {} : {}", tx.getId(),Status.ERROR, e.getMessage());
             updateStatus(tx.getId(), Status.ERROR, e.getMessage());
             throw new InternalServerErrorException("Unexpected error");
         }
@@ -81,12 +92,12 @@ public class TransactionService {
                 .createdAt(LocalDateTime.now())
                 .rollbackStatus(RollBackStatus.NONE)
                 .build();
-
+        log.info("TX {} created SUCCESS", tx.getId());
         return transactionRepository.save(tx);
     }
     private void validateAccounts(AccountResponseDto from, AccountResponseDto to,
                                   TransactionRequestDto dto, Long userId) {
-
+        log.debug("TX balance check: balance={}, amount={}", from.getBalance(), dto.getAmount());
         if (!from.getUserId().equals(userId)) {
             throw new BadRequestException("This account does not belong to you");
         }
@@ -105,12 +116,14 @@ public class TransactionService {
         if (from.getBalance().compareTo(dto.getAmount()) < 0) {
             throw new BadRequestException("Not enough money");
         }
+
+
     }
     @Transactional
     public void updateStatus(Long id, Status status, String error) {
         Transaction tx = transactionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Transaction not found"));
-
+        log.info("TX {} updated status: {}", tx.getId(), status);
         tx.setStatus(status);
         tx.setErrorMessage(error);
         tx.setUpdatedAt(LocalDateTime.now());
@@ -121,12 +134,13 @@ public class TransactionService {
     @Transactional
     public boolean compensate(Long txId, Long fromAccountId, BigDecimal amount) {
         try {
+            log.info("TX {} rollback: returning money to account {}", txId, fromAccountId);
             accountClient.credit(fromAccountId, amount,txId);
-            updateRollback(txId, Status.ROLLBACK, RollBackStatus.SUCCESS, null);
+            updateRollback(txId, Status.FAILED, RollBackStatus.SUCCESS, null);
             return true;
         } catch (FeignException e) {
-            log.warn("Credit failed: status={}, msg={}, body={}", e.status(), e.getMessage(), e.contentUTF8());
-            updateRollback(txId, Status.ERROR, RollBackStatus.FAILED, "Rollback failed: " + e.getMessage());
+            log.error("TX {} rollback FAILED: {}", txId, e.getMessage());
+            updateRollback(txId, Status.FAILED, RollBackStatus.FAILED, "Rollback failed: " + e.getMessage());
             return false;
         }
     }
@@ -138,6 +152,7 @@ public class TransactionService {
         tx.setRollbackStatus(rbStatus);
         tx.setErrorMessage(error);
         tx.setUpdatedAt(LocalDateTime.now());
+        log.info("TX {} status changed: {} (error={})", txId, status, error);
         transactionRepository.save(tx);
     }
     private TransactionResponseDto convertToDto(Transaction transaction) {
