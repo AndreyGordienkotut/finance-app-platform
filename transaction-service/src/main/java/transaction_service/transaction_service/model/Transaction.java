@@ -35,6 +35,8 @@ public class Transaction {
     @Enumerated(EnumType.STRING)
     @Column(name="roll_back_status", nullable = false)
     private RollBackStatus rollbackStatus = RollBackStatus.NONE;
+    @Column(name = "idempotency_key", unique = true, nullable = false)
+    private String idempotencyKey;
 
 
 }

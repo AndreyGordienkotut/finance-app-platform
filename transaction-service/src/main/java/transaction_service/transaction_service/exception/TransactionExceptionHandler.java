@@ -28,5 +28,10 @@ public class TransactionExceptionHandler {
         Map<String, String> response = Collections.singletonMap("message", ex.getMessage());
         return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
     }
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<Map<String, String>> handleConflict(ConflictException ex){
+        Map<String, String> response = Collections.singletonMap("message", ex.getMessage());
+        return new ResponseEntity<>(response, HttpStatus.CONFLICT);
+    }
 
 }

@@ -25,9 +25,10 @@ public class TransactionController {
     private final TransactionService transactionService;
     @PostMapping("/transfer")
     public ResponseEntity<TransactionResponseDto> transfer(@RequestBody TransactionRequestDto dto,
-                                                           Principal principal) {
+                                                           Principal principal
+    ,@RequestHeader("Idempotency-Key") String idempotencyKey) {
         Long userId = Long.parseLong(principal.getName());
-        TransactionResponseDto response = transactionService.transfer(dto, userId);
+        TransactionResponseDto response = transactionService.transfer(dto, userId,idempotencyKey);
         return ResponseEntity.ok(response);
     }
 }

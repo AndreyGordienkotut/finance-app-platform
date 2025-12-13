@@ -7,6 +7,7 @@ import feign.FeignException;
 import feign.Logger;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ import transaction_service.transaction_service.repository.TransactionRepository;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 
 @Slf4j
@@ -31,12 +33,35 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final AccountClient accountClient;
 
-    public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId) {
+    public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
+        Optional<Transaction> existingTx = transactionRepository.findByIdempotencyKey(idempotencyKey);
+        if (existingTx.isPresent()) {
+            Transaction tx = existingTx.get();
+            log.info("TX {} Idempotency key match: returning previous result with status {}", tx.getId(), tx.getStatus());
+
+            if (tx.getStatus() != Status.PENDING) {
+                return convertToDto(tx);
+            }
+            throw new ConflictException("Transaction is already pending with this key and is being processed.");
+        }
+
         AccountResponseDto from = accountClient.getAccountById(dto.getFromAccountId());
         AccountResponseDto to = accountClient.getAccountById(dto.getToAccountId());
-        log.info("TX START: from={}, to={}, amount={}, userId={}",
-                dto.getFromAccountId(), dto.getToAccountId(), dto.getAmount(), userId);
-        Transaction tx = createPending(dto, from.getCurrency());
+        Transaction tx;
+        try {
+            tx = createPending(dto, from.getCurrency(), idempotencyKey);
+        } catch (DataIntegrityViolationException e) {
+            log.warn("Idempotency Key Conflict for key: {}. Another process saved the transaction first.", idempotencyKey);
+            Transaction conflictTx = transactionRepository.findByIdempotencyKey(idempotencyKey)
+                    .orElseThrow(() -> {
+                        log.error("Conflict occurred, but transaction was not found after retry. Key: {}", idempotencyKey);
+                        return new InternalServerErrorException("Internal conflict handling error.");
+                    });
+            if (conflictTx.getStatus() == Status.PENDING) {
+                throw new ConflictException("Transaction with this key is currently being processed.");
+            }
+            return convertToDto(conflictTx);
+        }
         try {
             log.info("TX {} validating accounts", tx.getId());
             validateAccounts(from, to, dto, userId);
@@ -82,7 +107,10 @@ public class TransactionService {
         }
     }
     @Transactional
-    public Transaction createPending(TransactionRequestDto dto, Currency getCurrency) {
+    public Transaction createPending(TransactionRequestDto dto, Currency getCurrency, String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new BadRequestException("Idempotency-Key header is required");
+        }
         Transaction tx = Transaction.builder()
                 .fromAccountId(dto.getFromAccountId())
                 .toAccountId(dto.getToAccountId())
@@ -91,9 +119,11 @@ public class TransactionService {
                 .currency(getCurrency)
                 .createdAt(LocalDateTime.now())
                 .rollbackStatus(RollBackStatus.NONE)
+                .idempotencyKey(idempotencyKey)
                 .build();
-        log.info("TX {} created SUCCESS", tx.getId());
-        return transactionRepository.save(tx);
+        Transaction saved = transactionRepository.save(tx);
+        log.info("TX {} created with status PENDING", saved.getId());
+        return saved;
     }
     private void validateAccounts(AccountResponseDto from, AccountResponseDto to,
                                   TransactionRequestDto dto, Long userId) {
