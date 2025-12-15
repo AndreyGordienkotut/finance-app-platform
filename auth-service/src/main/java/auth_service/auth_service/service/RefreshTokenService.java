@@ -25,7 +25,7 @@ public class RefreshTokenService {
     private final RefreshTokenRepository refreshTokenRepository;
 
     private final UsersRepository userRepository;
-    private final JwtService jwtService;
+//    private final JwtService jwtService;
     @Transactional
     public RefreshToken createRefreshToken(Long userId) {
         Users user = userRepository.findById(userId)
