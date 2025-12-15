@@ -1,4 +1,4 @@
-package account_service.account_service.exception;
+package core.core.exception;
 
 public class NotFoundException extends RuntimeException {
     public NotFoundException(String message) {

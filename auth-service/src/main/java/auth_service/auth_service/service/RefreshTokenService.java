@@ -1,12 +1,12 @@
 package auth_service.auth_service.service;
 
 
-import auth_service.auth_service.exception.BadRequestException;
+
 import auth_service.auth_service.model.RefreshToken;
 import auth_service.auth_service.model.Users;
 import auth_service.auth_service.repository.RefreshTokenRepository;
 import auth_service.auth_service.repository.UsersRepository;
-import auth_service.auth_service.exception.*;
+import core.core.exception.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;

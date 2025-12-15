@@ -1,7 +1,7 @@
 package account_service.account_service.repository;
 
 import account_service.account_service.model.Account;
-import core.core.StatusAccount;
+import core.core.enums.StatusAccount;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

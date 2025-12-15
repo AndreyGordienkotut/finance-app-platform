@@ -14,8 +14,10 @@ import lombok.NoArgsConstructor;
 @Builder
 public class RegisterRequestDto {
     @Email(message = "Email should be valid")
+    @NotBlank
     private String email;
     @Size(min = 6, message = "Password must be at least 6 characters long")
+    @NotBlank
     private String password;
     @NotBlank(message = "Username name cannot be empty")
     private String username;

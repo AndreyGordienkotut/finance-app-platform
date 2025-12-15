@@ -1,7 +1,7 @@
-package core.core;
+package core.core.dto;
 
-import core.core.Currency;
-import core.core.Status;
+import core.core.enums.Currency;
+import core.core.enums.StatusAccount;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

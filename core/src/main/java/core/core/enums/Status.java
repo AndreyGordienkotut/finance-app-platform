@@ -1,4 +1,4 @@
-package core.core;
+package core.core.enums;
 
 public enum Status {
     PENDING,

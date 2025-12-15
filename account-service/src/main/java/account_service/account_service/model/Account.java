@@ -1,7 +1,7 @@
 package account_service.account_service.model;
 
-import core.core.Currency;
-import core.core.StatusAccount;
+import core.core.enums.Currency;
+import core.core.enums.StatusAccount;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

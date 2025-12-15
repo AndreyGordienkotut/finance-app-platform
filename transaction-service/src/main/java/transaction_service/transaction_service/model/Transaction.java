@@ -1,6 +1,6 @@
 package transaction_service.transaction_service.model;
 
-import core.core.Currency;
+import core.core.enums.Currency;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -16,10 +16,10 @@ public class Transaction {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    @Column(name = "from_account_id")
-    private Long fromAccountId;
-    @Column(name="to_account_id")
-    private Long toAccountId;
+    @Column(name = "source_account_id")
+    private Long sourceAccountId;
+    @Column(name="target_account_id")
+    private Long targetAccountId;
     @Column(nullable = false)
     private BigDecimal amount;
     @Enumerated(EnumType.STRING)
@@ -32,11 +32,15 @@ public class Transaction {
     private String errorMessage;
     @Column(name = "update_at")
     private LocalDateTime updatedAt;
-    @Enumerated(EnumType.STRING)
-    @Column(name="roll_back_status", nullable = false)
-    private RollBackStatus rollbackStatus = RollBackStatus.NONE;
     @Column(name = "idempotency_key", unique = true, nullable = false)
     private String idempotencyKey;
+    @Enumerated(EnumType.STRING)
+    private TypeTransaction typeTransaction;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "transaction_step", nullable = false)
+    private TransactionStep step = TransactionStep.NONE;
+
 
 
 }

@@ -7,14 +7,11 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class TransactionRequestDto {
-    @NotNull
-    private Long sourceAccountId;
+public class DepositRequestDto {
     @NotNull
     private Long targetAccountId;
     @DecimalMin(value = "0.01", inclusive = true)
@@ -22,4 +19,3 @@ public class TransactionRequestDto {
     @NotNull
     private BigDecimal amount;
 }
-

@@ -1,10 +1,9 @@
 package transaction_service.transaction_service.service;
 
-import core.core.AccountResponseDto;
-import core.core.Currency;
-import core.core.StatusAccount;
+import core.core.dto.AccountResponseDto;
+import core.core.enums.Currency;
+import core.core.enums.StatusAccount;
 import feign.FeignException;
-import org.junit.Before;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,12 +12,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.boot.test.context.SpringBootTest;
 import transaction_service.transaction_service.config.AccountClient;
 import transaction_service.transaction_service.dto.TransactionRequestDto;
-import transaction_service.transaction_service.dto.TransactionResponseDto;
-import transaction_service.transaction_service.exception.BadRequestException;
-import transaction_service.transaction_service.exception.InternalServerErrorException;
+import core.core.exception.*;
 import transaction_service.transaction_service.model.RollBackStatus;
 import transaction_service.transaction_service.model.Status;
 import transaction_service.transaction_service.model.Transaction;

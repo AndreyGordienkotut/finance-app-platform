@@ -1,25 +1,24 @@
 package transaction_service.transaction_service.service;
 
-import core.core.AccountResponseDto;
-import core.core.Currency;
-import core.core.StatusAccount;
+import core.core.dto.AccountResponseDto;
+import core.core.enums.Currency;
+import core.core.enums.StatusAccount;
 import feign.FeignException;
-import feign.Logger;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import transaction_service.transaction_service.exception.*;
+import transaction_service.transaction_service.dto.DepositRequestDto;
+import transaction_service.transaction_service.dto.WithdrawRequestDto;
+import core.core.exception.*;
 import transaction_service.transaction_service.config.AccountClient;
 import transaction_service.transaction_service.dto.TransactionRequestDto;
 import transaction_service.transaction_service.dto.TransactionResponseDto;
-import transaction_service.transaction_service.model.RollBackStatus;
-import transaction_service.transaction_service.model.Status;
-import transaction_service.transaction_service.model.Transaction;
+import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,96 +33,199 @@ public class TransactionService {
     private final AccountClient accountClient;
 
     public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
+    if (idempotencyKey == null || idempotencyKey.isBlank()) {
+        throw new BadRequestException("Idempotency-Key header is required.");
+    }
+
+    AccountResponseDto from = accountClient.getAccountById(dto.getSourceAccountId());
+    AccountResponseDto to = accountClient.getAccountById(dto.getTargetAccountId());
+
+    validateAccounts(from, to, dto, userId);
+
+    return processTransaction(
+            from.getId(),
+            to.getId(),
+            dto.getAmount(),
+            from.getCurrency(),
+            TypeTransaction.TRANSFER,
+            idempotencyKey
+        );
+    }
+
+    public TransactionResponseDto deposit(DepositRequestDto dto, String idempotencyKey, Long userId) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new BadRequestException("Idempotency-Key header is required.");
+        }
+
+
+        AccountResponseDto targetAccount = accountClient.getAccountById(dto.getTargetAccountId());
+        if (!targetAccount.getUserId().equals(userId)) {
+            throw new BadRequestException("Account does not belong to you");
+        }
+        if (targetAccount.getStatus() == StatusAccount.CLOSED) {
+            throw new BadRequestException("Target account is closed.");
+        }
+
+        return processTransaction(
+                null,
+                targetAccount.getId(),
+                dto.getAmount(),
+                targetAccount.getCurrency(),
+                TypeTransaction.DEPOSIT,
+                idempotencyKey
+        );
+    }
+    public TransactionResponseDto withdraw(WithdrawRequestDto dto, Long userId, String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new BadRequestException("Idempotency-Key header is required.");
+        }
+
+        AccountResponseDto sourceAccount = accountClient.getAccountById(dto.getSourceAccountId());
+
+        validateWithdraw(sourceAccount, dto, userId);
+
+        return processTransaction(
+                sourceAccount.getId(),
+                null,
+                dto.getAmount(),
+                sourceAccount.getCurrency(),
+                TypeTransaction.WITHDRAW,
+                idempotencyKey
+        );
+    }
+    public Page<TransactionResponseDto> getHistory(Long accountId, Pageable pageable,Long userId) {
+        AccountResponseDto account = accountClient.getAccountById(accountId);
+        if (!account.getUserId().equals(userId)) {
+            throw new NotFoundException("Account not found or access denied for this user.");
+        }
+        Page<Transaction> transactions = transactionRepository
+                .findBySourceAccountIdOrTargetAccountId(accountId, accountId, pageable);
+
+        return transactions.map(this::convertToDto);
+    }
+    private TransactionResponseDto processTransaction(
+            Long sourceAccountId, Long targetAccountId, BigDecimal amount,
+            Currency currency, TypeTransaction type, String idempotencyKey)
+    {
         Optional<Transaction> existingTx = transactionRepository.findByIdempotencyKey(idempotencyKey);
         if (existingTx.isPresent()) {
             Transaction tx = existingTx.get();
-            log.info("TX {} Idempotency key match: returning previous result with status {}", tx.getId(), tx.getStatus());
-
-            if (tx.getStatus() != Status.PENDING) {
-                return convertToDto(tx);
+            TransactionResponseDto txDto = convertToDto(tx);
+            if (tx.getStatus() == Status.CREATED || tx.getStatus() == Status.PROCESSING) {
+                throw new ConflictException("Transaction is already pending with this key and is being processed.", txDto);
             }
-            throw new ConflictException("Transaction is already pending with this key and is being processed.");
+            return txDto;
         }
-
-        AccountResponseDto from = accountClient.getAccountById(dto.getFromAccountId());
-        AccountResponseDto to = accountClient.getAccountById(dto.getToAccountId());
         Transaction tx;
         try {
-            tx = createPending(dto, from.getCurrency(), idempotencyKey);
+            tx = createTransaction(sourceAccountId, targetAccountId, amount, currency, type, idempotencyKey);
+            updateStatus(tx.getId(), Status.PROCESSING, null);
         } catch (DataIntegrityViolationException e) {
-            log.warn("Idempotency Key Conflict for key: {}. Another process saved the transaction first.", idempotencyKey);
+            log.warn("Idempotency Key Conflict: Another process saved the transaction first. Key: {}", idempotencyKey);
             Transaction conflictTx = transactionRepository.findByIdempotencyKey(idempotencyKey)
-                    .orElseThrow(() -> {
-                        log.error("Conflict occurred, but transaction was not found after retry. Key: {}", idempotencyKey);
-                        return new InternalServerErrorException("Internal conflict handling error.");
-                    });
-            if (conflictTx.getStatus() == Status.PENDING) {
-                throw new ConflictException("Transaction with this key is currently being processed.");
+                    .orElseThrow(() -> new InternalServerErrorException("Internal conflict handling error."));
+
+            TransactionResponseDto conflictTxDto = convertToDto(conflictTx);
+            if (conflictTx.getStatus() == Status.CREATED) {
+                throw new ConflictException("Transaction with this key is currently being processed.", conflictTxDto);
             }
-            return convertToDto(conflictTx);
+
+            return conflictTxDto;
         }
         try {
-            log.info("TX {} validating accounts", tx.getId());
-            validateAccounts(from, to, dto, userId);
-            boolean debitSucceeded = false;
-            try {
-                log.info("TX {} calling debit for account {}", tx.getId(), from.getId());
-                accountClient.debit(from.getId(), dto.getAmount(),tx.getId());
-                log.info("TX {} debit succeeded: from={}, amount={}", tx.getId(), from.getId(), dto.getAmount());
-                debitSucceeded = true;
-                accountClient.credit(to.getId(), dto.getAmount(),tx.getId());
-                log.info("TX {} credit succeeded: to={}, amount={}", tx.getId(), to.getId(), dto.getAmount());
-                updateStatus(tx.getId(), Status.SUCCESS, null);
-                Transaction updated = transactionRepository.findById(tx.getId()).orElseThrow();
-                log.info("TX {} finished SUCCESS", tx.getId());
-                return convertToDto(updated);
+            executeFinancialOperations(tx, type, sourceAccountId, targetAccountId, amount);
 
-
-            } catch (FeignException e) {
-                log.warn("TX {} remote call failed: {}", tx.getId(), e.getMessage());
-
-                if (debitSucceeded) {
-                    log.warn("TX {} credit failed, starting rollback", tx.getId());
-
-                    compensate(tx.getId(), from.getId(), dto.getAmount());
-
-                    Transaction updated = transactionRepository.findById(tx.getId()).orElseThrow();
-                    return convertToDto(updated);
-                } else {
-                    updateStatus(tx.getId(), Status.FAILED, "Debit failed: " + e.getMessage());
-                    throw new BadRequestException("Debit failed: " + e.getMessage());
-                }
-            }
+            updateStatus(tx.getId(), Status.COMPLETED, null);
+            return convertToDto(transactionRepository.findById(tx.getId()).orElseThrow());
 
         } catch (BadRequestException e) {
-            log.warn("TX {} validation failed with status {}: {}", tx.getId(),Status.FAILED, e.getMessage());
             updateStatus(tx.getId(), Status.FAILED, e.getMessage());
             throw e;
-
         } catch (Exception e) {
-            log.error("TX {} unexpected error with status {} : {}", tx.getId(),Status.ERROR, e.getMessage());
-            updateStatus(tx.getId(), Status.ERROR, e.getMessage());
+            log.error("TX {} unexpected error: {}", tx.getId(), e.getMessage(), e);
+            updateStatus(tx.getId(), Status.FAILED, "Unexpected error: " + e.getMessage());
             throw new InternalServerErrorException("Unexpected error");
         }
     }
-    @Transactional
-    public Transaction createPending(TransactionRequestDto dto, Currency getCurrency, String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw new BadRequestException("Idempotency-Key header is required");
+     void executeFinancialOperations(Transaction tx, TypeTransaction type,
+                                            Long sourceAccountId, Long targetAccountId, BigDecimal amount) {
+        if (type == TypeTransaction.TRANSFER) {
+            executeSaga(tx, sourceAccountId, targetAccountId, amount);
+        } else if (type == TypeTransaction.DEPOSIT) {
+            executeCredit(tx.getId(), targetAccountId, amount);
+        } else if (type == TypeTransaction.WITHDRAW) {
+            executeDebit(tx.getId(), sourceAccountId, amount);
         }
+    }
+
+
+
+    @Transactional
+    public Transaction createTransaction(Long sourceId, Long targetId, BigDecimal amount,
+                                         Currency currency, TypeTransaction type, String idempotencyKey) {
         Transaction tx = Transaction.builder()
-                .fromAccountId(dto.getFromAccountId())
-                .toAccountId(dto.getToAccountId())
-                .amount(dto.getAmount())
-                .status(Status.PENDING)
-                .currency(getCurrency)
+                .sourceAccountId(sourceId)
+                .targetAccountId(targetId)
+                .amount(amount)
+                .status(Status.CREATED)
+                .currency(currency)
                 .createdAt(LocalDateTime.now())
-                .rollbackStatus(RollBackStatus.NONE)
                 .idempotencyKey(idempotencyKey)
+                .typeTransaction(type)
+                .step(TransactionStep.NONE)
                 .build();
         Transaction saved = transactionRepository.save(tx);
-        log.info("TX {} created with status PENDING", saved.getId());
+        log.info("TX {} created (Type: {})", saved.getId(), type);
         return saved;
+    }
+    private void executeSaga(Transaction tx, Long fromId, Long toId, BigDecimal amount) {
+        boolean debitSucceeded = tx.getStep() == TransactionStep.DEBIT_DONE;
+        try {
+            if (tx.getStep() == TransactionStep.NONE) {
+                log.info("TX {} SAGA step NONE: Starting Debit for account {}", tx.getId(), fromId);
+                executeDebit(tx.getId(), fromId, amount);
+                updateStep(tx.getId(), TransactionStep.DEBIT_DONE);
+                debitSucceeded = true;
+            }
+
+            if (tx.getStep() == TransactionStep.DEBIT_DONE) {
+                log.info("TX {} SAGA step DEBIT_DONE: Starting Credit for account {}", tx.getId(), toId);
+                executeCredit(tx.getId(), toId, amount);
+                updateStep(tx.getId(), TransactionStep.CREDIT_DONE);
+            }
+        } catch (FeignException e) {
+            log.warn("TX {} remote call failed: {}", tx.getId(), e.getMessage());
+
+            if (debitSucceeded) {
+                log.warn("TX {} Credit failed, starting compensation (rollback)", tx.getId());
+                try {
+                    compensate(tx.getId(), fromId, amount);
+                } catch (RuntimeException re) {
+                    log.error("TX {} compensation FAILED: {}", tx.getId(), re.getMessage());
+                    updateStatus(tx.getId(), Status.FAILED, "Transfer failed. Compensation failed: " + re.getMessage());
+                    throw new BadRequestException("Transfer failed. Compensation failed.");
+                }
+            }
+            throw new BadRequestException("Transfer failed: " + e.getMessage());
+        }
+    }
+    @Transactional
+    public void updateStep(Long txId, TransactionStep step) {
+        Transaction tx = transactionRepository.findById(txId)
+                .orElseThrow(() -> new NotFoundException("Transaction not found"));
+        tx.setStep(step);
+        tx.setUpdatedAt(LocalDateTime.now());
+        transactionRepository.save(tx);
+        log.info("TX {} step updated to {}", txId, step);
+    }
+    private void executeDebit(Long txId, Long accountId, BigDecimal amount) {
+        log.info("TX {} calling debit for account {}", txId, accountId);
+        accountClient.debit(accountId, amount, txId);
+    }
+
+    private void executeCredit(Long txId, Long accountId, BigDecimal amount) {
+        log.info("TX {} calling credit for account {}", txId, accountId);
+        accountClient.credit(accountId, amount, txId);
     }
     private void validateAccounts(AccountResponseDto from, AccountResponseDto to,
                                   TransactionRequestDto dto, Long userId) {
@@ -131,7 +233,7 @@ public class TransactionService {
         if (!from.getUserId().equals(userId)) {
             throw new BadRequestException("This account does not belong to you");
         }
-        if (dto.getFromAccountId().equals(dto.getToAccountId())) {
+        if (dto.getSourceAccountId().equals(dto.getTargetAccountId())) {
             throw new BadRequestException("Same account");
         }
 
@@ -149,6 +251,19 @@ public class TransactionService {
 
 
     }
+    private void validateWithdraw(AccountResponseDto source, WithdrawRequestDto dto, Long userId) {
+        log.debug("TX balance check for withdraw: balance={}, amount={}", source.getBalance(), dto.getAmount());
+
+        if (!source.getUserId().equals(userId)) {
+            throw new BadRequestException("Source account does not belong to you.");
+        }
+        if (source.getStatus() == StatusAccount.CLOSED) {
+            throw new BadRequestException("Account is closed.");
+        }
+        if (source.getBalance().compareTo(dto.getAmount()) < 0) {
+            throw new BadRequestException("Not enough money in source account for withdrawal.");
+        }
+    }
     @Transactional
     public void updateStatus(Long id, Status status, String error) {
         Transaction tx = transactionRepository.findById(id)
@@ -161,43 +276,148 @@ public class TransactionService {
 
 
     }
-    @Transactional
-    public boolean compensate(Long txId, Long fromAccountId, BigDecimal amount) {
+
+    public void compensate(Long txId, Long fromAccountId, BigDecimal amount) {
         try {
-            log.info("TX {} rollback: returning money to account {}", txId, fromAccountId);
-            accountClient.credit(fromAccountId, amount,txId);
-            updateRollback(txId, Status.FAILED, RollBackStatus.SUCCESS, null);
-            return true;
+            log.info("TX {} compensation: returning money to account {}", txId, fromAccountId);
+            accountClient.credit(fromAccountId, amount, txId);
+            log.info("TX {} compensation SUCCESS", txId);
         } catch (FeignException e) {
-            log.error("TX {} rollback FAILED: {}", txId, e.getMessage());
-            updateRollback(txId, Status.FAILED, RollBackStatus.FAILED, "Rollback failed: " + e.getMessage());
-            return false;
+            log.error("TX {} compensation FAILED: {}", txId, e.getMessage());
+//            updateStatus(txId, Status.FAILED, "Compensation failed: " + e.getMessage());
+            throw new RuntimeException("Compensation failed", e);
         }
     }
-    @Transactional
-    public void updateRollback(Long txId, Status status, RollBackStatus rbStatus, String error) {
-        Transaction tx = transactionRepository.findById(txId)
-                .orElseThrow(() -> new NotFoundException("Transaction not found"));
-        tx.setStatus(status);
-        tx.setRollbackStatus(rbStatus);
-        tx.setErrorMessage(error);
-        tx.setUpdatedAt(LocalDateTime.now());
-        log.info("TX {} status changed: {} (error={})", txId, status, error);
-        transactionRepository.save(tx);
-    }
+
     private TransactionResponseDto convertToDto(Transaction transaction) {
         return new TransactionResponseDto(
                 transaction.getId(),
-                transaction.getFromAccountId(),
-                transaction.getToAccountId(),
+                transaction.getSourceAccountId(),
+                transaction.getTargetAccountId(),
                 transaction.getAmount(),
                 transaction.getCurrency(),
                 transaction.getStatus(),
                 transaction.getCreatedAt(),
                 transaction.getErrorMessage(),
                 transaction.getUpdatedAt(),
-                transaction.getRollbackStatus()
+                transaction.getTypeTransaction()
         );
     }
+    //    @Transactional
+//    public void updateRollback(Long txId, Status status, RollBackStatus rbStatus, String error) {
+//        Transaction tx = transactionRepository.findById(txId)
+//                .orElseThrow(() -> new NotFoundException("Transaction not found"));
+//        tx.setStatus(status);
+//        tx.setErrorMessage(error);
+//        tx.setUpdatedAt(LocalDateTime.now());
+//        log.info("TX {} status changed: {} (error={})", txId, status, error);
+//        transactionRepository.save(tx);
+//    }
+    //    @Transactional
+//    public boolean compensate(Long txId, Long fromAccountId, BigDecimal amount) {
+//        try {
+//            log.info("TX {} rollback: returning money to account {}", txId, fromAccountId);
+//            accountClient.credit(fromAccountId, amount,txId);
+//            updateRollback(txId, Status.FAILED, RollBackStatus.SUCCESS, null);
+//            return true;
+//        } catch (FeignException e) {
+//            log.error("TX {} rollback FAILED: {}", txId, e.getMessage());
+//            updateRollback(txId, Status.FAILED, RollBackStatus.FAILED, "Rollback failed: " + e.getMessage());
+//            return false;
+//        }
+//    }
 
+
+//    @Transactional
+//    public Transaction createPending(TransactionRequestDto dto, Currency getCurrency, String idempotencyKey) {
+//        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+//            throw new BadRequestException("Idempotency-Key header is required");
+//        }
+//        Transaction tx = Transaction.builder()
+//                .sourceAccountId(dto.getSourceAccountId())
+//                .targetAccountId(dto.getTargetAccountId())
+//                .amount(dto.getAmount())
+//                .status(Status.CREATED)
+//                .currency(getCurrency)
+//                .createdAt(LocalDateTime.now())
+//                .idempotencyKey(idempotencyKey)
+//                .build();
+//        Transaction saved = transactionRepository.save(tx);
+//        log.info("TX {} created with status PENDING", saved.getId());
+//        return saved;
+//    }
+    //    public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
+//        Optional<Transaction> existingTx = transactionRepository.findByIdempotencyKey(idempotencyKey);
+//        if (existingTx.isPresent()) {
+//            Transaction tx = existingTx.get();
+//            log.info("TX {} Idempotency key match: returning previous result with status {}", tx.getId(), tx.getStatus());
+//
+//            if (tx.getStatus() != Status.CREATED) {
+//                return convertToDto(tx);
+//            }
+//            throw new ConflictException("Transaction is already pending with this key and is being processed.");
+//        }
+//
+//        AccountResponseDto from = accountClient.getAccountById(dto.getSourceAccountId());
+//        AccountResponseDto to = accountClient.getAccountById(dto.getTargetAccountId());
+//        Transaction tx;
+//        try {
+//            tx = createPending(dto, from.getCurrency(), idempotencyKey);
+//            tx.setTypeTransaction(TypeTransaction.TRANSFER);
+//        } catch (DataIntegrityViolationException e) {
+//            log.warn("Idempotency Key Conflict for key: {}. Another process saved the transaction first.", idempotencyKey);
+//            Transaction conflictTx = transactionRepository.findByIdempotencyKey(idempotencyKey)
+//                    .orElseThrow(() -> {
+//                        log.error("Conflict occurred, but transaction was not found after retry. Key: {}", idempotencyKey);
+//                        return new InternalServerErrorException("Internal conflict handling error.");
+//                    });
+//            if (conflictTx.getStatus() == Status.CREATED) {
+//                throw new ConflictException("Transaction with this key is currently being processed.");
+//            }
+//            return convertToDto(conflictTx);
+//        }
+//        try {
+//            log.info("TX {} validating accounts", tx.getId());
+//            validateAccounts(from, to, dto, userId);
+//            boolean debitSucceeded = false;
+//            try {
+//                log.info("TX {} calling debit for account {}", tx.getId(), from.getId());
+//                accountClient.debit(from.getId(), dto.getAmount(),tx.getId());
+//                log.info("TX {} debit succeeded: from={}, amount={}", tx.getId(), from.getId(), dto.getAmount());
+//                debitSucceeded = true;
+//                accountClient.credit(to.getId(), dto.getAmount(),tx.getId());
+//                log.info("TX {} credit succeeded: to={}, amount={}", tx.getId(), to.getId(), dto.getAmount());
+//                updateStatus(tx.getId(), Status.COMPLETED, null);
+//                Transaction updated = transactionRepository.findById(tx.getId()).orElseThrow();
+//                log.info("TX {} finished SUCCESS", tx.getId());
+//                return convertToDto(updated);
+//
+//
+//            } catch (FeignException e) {
+//                log.warn("TX {} remote call failed: {}", tx.getId(), e.getMessage());
+//
+//                if (debitSucceeded) {
+//                    log.warn("TX {} credit failed, starting rollback", tx.getId());
+//
+//                    compensate(tx.getId(), from.getId(), dto.getAmount());
+//
+//                    Transaction updated = transactionRepository.findById(tx.getId()).orElseThrow();
+//                    return convertToDto(updated);
+//                } else {
+//                    updateStatus(tx.getId(), Status.FAILED, "Debit failed: " + e.getMessage());
+//                    throw new BadRequestException("Debit failed: " + e.getMessage());
+//                }
+//            }
+//
+//        } catch (BadRequestException e) {
+//            log.warn("TX {} validation failed with status {}: {}", tx.getId(),Status.FAILED, e.getMessage());
+//            updateStatus(tx.getId(), Status.FAILED, e.getMessage());
+//            throw e;
+//
+//        } catch (Exception e) {
+//            log.error("TX {} unexpected error with status {} : {}", tx.getId(),Status.FAILED, e.getMessage());
+//            updateStatus(tx.getId(), Status.FAILED, e.getMessage());
+//            throw new InternalServerErrorException("Unexpected error");
+//        }
+//    }
 }

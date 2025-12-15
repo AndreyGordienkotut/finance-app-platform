@@ -1,6 +1,6 @@
 package transaction_service.transaction_service.config;
 
-import core.core.AccountResponseDto;
+import core.core.dto.AccountResponseDto;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

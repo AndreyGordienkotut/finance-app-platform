@@ -1,9 +1,9 @@
 package account_service.account_service.controller;
 
 import account_service.account_service.dto.AccountRequestDto;
-import core.core.AccountResponseDto;
-import account_service.account_service.model.Account;
+import core.core.dto.AccountResponseDto;
 import account_service.account_service.service.AccountService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -20,7 +20,8 @@ import java.security.Principal;
 public class AccountController {
     private final AccountService accountService;
     @PostMapping("/create")
-    public ResponseEntity<AccountResponseDto> createAccount(@RequestBody AccountRequestDto requestDto, Principal principal) {
+    public ResponseEntity<AccountResponseDto> createAccount(@Valid @RequestBody AccountRequestDto requestDto, Principal principal) {
+
         Long userId = Long.parseLong(principal.getName());
         AccountResponseDto accountResponseDto = accountService.createAccount(requestDto, userId);
         return new ResponseEntity<>(accountResponseDto, HttpStatus.CREATED);
