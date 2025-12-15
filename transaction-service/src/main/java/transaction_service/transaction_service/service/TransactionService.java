@@ -33,16 +33,16 @@ public class TransactionService {
     private final AccountClient accountClient;
 
     public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
-    if (idempotencyKey == null || idempotencyKey.isBlank()) {
-        throw new BadRequestException("Idempotency-Key header is required.");
-    }
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+           throw new BadRequestException("Idempotency-Key header is required.");
+        }
 
-    AccountResponseDto from = accountClient.getAccountById(dto.getSourceAccountId());
-    AccountResponseDto to = accountClient.getAccountById(dto.getTargetAccountId());
+        AccountResponseDto from = validateAccountOwnership(dto.getSourceAccountId(), userId);
+        AccountResponseDto to = accountClient.getAccountById(dto.getTargetAccountId());
 
-    validateAccounts(from, to, dto, userId);
+        validateAccounts(from, to, dto, userId);
 
-    return processTransaction(
+        return processTransaction(
             from.getId(),
             to.getId(),
             dto.getAmount(),
@@ -58,7 +58,7 @@ public class TransactionService {
         }
 
 
-        AccountResponseDto targetAccount = accountClient.getAccountById(dto.getTargetAccountId());
+        AccountResponseDto targetAccount = validateAccountOwnership(dto.getTargetAccountId(), userId);
         if (!targetAccount.getUserId().equals(userId)) {
             throw new BadRequestException("Account does not belong to you");
         }
@@ -80,7 +80,7 @@ public class TransactionService {
             throw new BadRequestException("Idempotency-Key header is required.");
         }
 
-        AccountResponseDto sourceAccount = accountClient.getAccountById(dto.getSourceAccountId());
+        AccountResponseDto sourceAccount = validateAccountOwnership(dto.getSourceAccountId(), userId);
 
         validateWithdraw(sourceAccount, dto, userId);
 
@@ -94,6 +94,7 @@ public class TransactionService {
         );
     }
     public Page<TransactionResponseDto> getHistory(Long accountId, Pageable pageable,Long userId) {
+        validateAccountOwnership(accountId, userId);
         AccountResponseDto account = accountClient.getAccountById(accountId);
         if (!account.getUserId().equals(userId)) {
             throw new NotFoundException("Account not found or access denied for this user.");
@@ -230,9 +231,7 @@ public class TransactionService {
     private void validateAccounts(AccountResponseDto from, AccountResponseDto to,
                                   TransactionRequestDto dto, Long userId) {
         log.debug("TX balance check: balance={}, amount={}", from.getBalance(), dto.getAmount());
-        if (!from.getUserId().equals(userId)) {
-            throw new BadRequestException("This account does not belong to you");
-        }
+
         if (dto.getSourceAccountId().equals(dto.getTargetAccountId())) {
             throw new BadRequestException("Same account");
         }
@@ -248,15 +247,9 @@ public class TransactionService {
         if (from.getBalance().compareTo(dto.getAmount()) < 0) {
             throw new BadRequestException("Not enough money");
         }
-
-
     }
     private void validateWithdraw(AccountResponseDto source, WithdrawRequestDto dto, Long userId) {
         log.debug("TX balance check for withdraw: balance={}, amount={}", source.getBalance(), dto.getAmount());
-
-        if (!source.getUserId().equals(userId)) {
-            throw new BadRequestException("Source account does not belong to you.");
-        }
         if (source.getStatus() == StatusAccount.CLOSED) {
             throw new BadRequestException("Account is closed.");
         }
