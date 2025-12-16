@@ -45,14 +45,7 @@ public class AccountController {
     public ResponseEntity<AccountResponseDto> getAccountById(@PathVariable Long id, Principal principal) {
         Long userId = Long.parseLong(principal.getName());
 
-        // 1. Получаем аккаунт
-        AccountResponseDto account = accountService.getAccountById(accountId);
-
-        // 2. ПРОВЕРКА ВЛАДЕНИЯ
-        if (!account.getUserId().equals(userId)) {
-            // Для GET-запроса лучше вернуть 404 (NotFound), чтобы не раскрывать чужие ID
-            throw new NotFoundException("Account not found.");
-        }
+        AccountResponseDto account = accountService.getAccountById(id);
 
         return ResponseEntity.ok(account);
     }
