@@ -31,7 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(AccountController.class)
 @Import({SecurityConfig.class, GlobalExceptionHandler.class})
-@AutoConfigureMockMvc(addFilters = true)
+@AutoConfigureMockMvc()
 class AccountSecurityTest {
 
     @Autowired
