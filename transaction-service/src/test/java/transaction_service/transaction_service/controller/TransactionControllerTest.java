@@ -11,15 +11,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
-import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
-import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.cloud.openfeign.FeignClient;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -27,7 +21,6 @@ import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import transaction_service.transaction_service.config.JwtAuthenticationFilter;
-import transaction_service.transaction_service.config.SecurityConfig;
 import transaction_service.transaction_service.dto.DepositRequestDto;
 import transaction_service.transaction_service.dto.TransactionRequestDto;
 import transaction_service.transaction_service.dto.TransactionResponseDto;
@@ -45,7 +38,6 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
@@ -54,7 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(TransactionController.class)
 @Import( GlobalExceptionHandler.class)
-@AutoConfigureMockMvc(addFilters = true)
+@AutoConfigureMockMvc
 public class TransactionControllerTest {
 
     @Autowired
@@ -66,7 +58,7 @@ public class TransactionControllerTest {
 
 
     private static final String API_PATH = "/api/transaction";
-    private static final String USER_ID = "100";
+//    private static final String USER_ID = "100";
     private static final String IDEMPOTENCY_KEY = "test-key-123";
 
     private TransactionResponseDto successTransferResponse;
