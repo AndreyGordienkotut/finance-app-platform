@@ -65,7 +65,7 @@ public class AccountService {
     @Transactional(readOnly = true)
     public AccountResponseDto getAccountById(Long id) {
         Account account = accountRepository.findById(id)
-                .orElseThrow(() -> new BadRequestException("Account not found"));
+                .orElseThrow(() -> new NotFoundException("Account not found"));
 
         return AccountResponseDto.builder()
                 .id(account.getId())
@@ -90,6 +90,9 @@ public class AccountService {
         if (account.getBalance().compareTo(amount) < 0) {
             throw new BadRequestException("Insufficient funds");
         }
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException("Amount must be positive");
+        }
 
         account.setBalance(account.getBalance().subtract(amount));
         accountRepository.save(account);
@@ -113,6 +116,9 @@ public class AccountService {
 
         if (account.getStatusAccount() != StatusAccount.ACTIVE) {
             throw new BadRequestException("Account is not active");
+        }
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException("Amount must be positive");
         }
 
         account.setBalance(account.getBalance().add(amount));

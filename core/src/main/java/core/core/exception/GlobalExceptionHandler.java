@@ -1,6 +1,7 @@
 package core.core.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -41,10 +42,11 @@ public class GlobalExceptionHandler {
     //400 Bad Request
     @ExceptionHandler({
             BadRequestException.class,
-            UserAlreadyExistsException.class
+            UserAlreadyExistsException.class,
+            MissingRequestHeaderException.class
     })
     public ResponseEntity<ApiError> handleBadRequestException(
-            RuntimeException ex, HttpServletRequest request) {
+            Exception ex, HttpServletRequest request) {
 
         ApiError apiError = new ApiError(
                 LocalDateTime.now(),

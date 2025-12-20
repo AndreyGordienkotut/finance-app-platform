@@ -12,12 +12,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import transaction_service.transaction_service.config.AccountClient;
 import transaction_service.transaction_service.dto.TransactionRequestDto;
 import core.core.exception.*;
-import transaction_service.transaction_service.model.RollBackStatus;
-import transaction_service.transaction_service.model.Status;
-import transaction_service.transaction_service.model.Transaction;
+import transaction_service.transaction_service.dto.TransactionResponseDto;
+import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
 
 import java.math.BigDecimal;
@@ -31,320 +31,361 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 public class TransactionServiceTest {
+
     @Mock
     private TransactionRepository transactionRepository;
-    @InjectMocks
-    private TransactionService transactionService;
     @Mock
     private AccountClient accountClient;
-
+    @InjectMocks
+    private TransactionService transactionService;
 
     private TransactionRequestDto transactionRequestDto;
     private Long userId;
+    private String idempotencyKey;
     private AccountResponseDto fromAccount;
     private AccountResponseDto toAccount;
-    private Transaction pendingTx;
-    private Transaction successTx;
+    private Transaction txInProgress;
+    private Transaction txCreated;
 
     @BeforeEach
     void setUp() {
-         transactionRequestDto = TransactionRequestDto.builder()
-                .fromAccountId(1L)
-                .toAccountId(2L)
+        transactionRequestDto = TransactionRequestDto.builder()
+                .sourceAccountId(1L)
+                .targetAccountId(2L)
                 .amount(BigDecimal.valueOf(100))
                 .build();
         userId = 1L;
-         fromAccount = AccountResponseDto.builder()
+        idempotencyKey = "test-key-123";
+
+        fromAccount = AccountResponseDto.builder()
                 .id(1L)
                 .userId(userId)
                 .currency(Currency.USD)
                 .balance(BigDecimal.valueOf(200))
                 .status(StatusAccount.ACTIVE)
                 .build();
-         toAccount = AccountResponseDto.builder()
+        toAccount = AccountResponseDto.builder()
                 .id(2L)
                 .userId(99L)
                 .currency(Currency.USD)
                 .balance(BigDecimal.valueOf(50))
                 .status(StatusAccount.ACTIVE)
                 .build();
-         pendingTx = Transaction.builder()
+
+        txCreated = Transaction.builder()
                 .id(10L)
-                .fromAccountId(1L)
-                .toAccountId(2L)
+                .sourceAccountId(1L)
+                .targetAccountId(2L)
                 .amount(BigDecimal.valueOf(100))
                 .currency(Currency.USD)
-                .status(Status.PENDING)
-                .rollbackStatus(RollBackStatus.NONE)
+                .status(Status.CREATED)
+                .typeTransaction(TypeTransaction.TRANSFER)
+                .step(TransactionStep.NONE)
                 .createdAt(LocalDateTime.now())
+                .idempotencyKey(idempotencyKey)
                 .build();
 
-
-
+        txInProgress = Transaction.builder()
+                .id(10L)
+                .sourceAccountId(1L)
+                .targetAccountId(2L)
+                .amount(BigDecimal.valueOf(100))
+                .currency(Currency.USD)
+                .status(Status.PROCESSING)
+                .typeTransaction(TypeTransaction.TRANSFER)
+                .step(TransactionStep.NONE)
+                .createdAt(LocalDateTime.now())
+                .idempotencyKey(idempotencyKey)
+                .build();
     }
 
     @Test
     @DisplayName("Succeed transfer")
-    void testSuccessfulTransfer(){
-        successTx = Transaction.builder()
-                .id(10L)
-                .fromAccountId(1L)
-                .toAccountId(2L)
-                .amount(BigDecimal.valueOf(100))
-                .currency(Currency.USD)
-                .status(Status.SUCCESS)
-                .rollbackStatus(RollBackStatus.NONE)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
-
+    void testSuccessfulTransfer() {
         when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
         when(accountClient.getAccountById(2L)).thenReturn(toAccount);
 
         doNothing().when(accountClient).debit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
         doNothing().when(accountClient).credit(eq(2L), eq(BigDecimal.valueOf(100)), anyLong());
 
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
+
         when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(inv -> {
-                    Transaction t = inv.getArgument(0);
-                    if (t.getId() == null) t.setId(10L);
-                    return t;
-                });
+                .thenReturn(txCreated);
 
-        when(transactionRepository.findById(10L))
-                .thenReturn(Optional.of(pendingTx));
+        when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(txCreated));
 
-        transactionService.transfer(transactionRequestDto, userId);
+        transactionService.transfer(transactionRequestDto, userId, idempotencyKey);
 
         ArgumentCaptor<Transaction> txCaptor = ArgumentCaptor.forClass(Transaction.class);
-        verify(transactionRepository, atLeastOnce()).save(txCaptor.capture());
+        verify(transactionRepository, atLeast(3)).save(txCaptor.capture());
+
         List<Transaction> allSaves = txCaptor.getAllValues();
         Transaction last = allSaves.get(allSaves.size() - 1);
-        assertEquals(Status.SUCCESS, last.getStatus());
-        assertEquals(1L, last.getFromAccountId());
-        assertEquals(2L, last.getToAccountId());
-        assertEquals(BigDecimal.valueOf(100), last.getAmount());
+
+        assertEquals(Status.COMPLETED, last.getStatus());
+        assertEquals(TransactionStep.CREDIT_DONE, last.getStep());
         assertNotNull(last.getUpdatedAt());
-        assertTrue(last.getErrorMessage() == null || last.getErrorMessage().isEmpty());
 
         verify(accountClient).debit(1L, BigDecimal.valueOf(100), 10L);
         verify(accountClient).credit(2L, BigDecimal.valueOf(100), 10L);
     }
     @Test
-    @DisplayName("Debit failed")
-    void testDebitFails(){
+    @DisplayName("SAGA: Debit failed -> FAILED status")
+    void testDebitFails() {
         when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
         when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+
         FeignException feignException = mock(FeignException.class);
         when(feignException.getMessage()).thenReturn("Debit failed");
 
         doThrow(feignException).when(accountClient).debit(eq(1L), any(), anyLong());
 
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(inv -> {
-                    Transaction t = inv.getArgument(0);
-                    if (t.getId() == null) t.setId(10L);
-                    return t;
-                });
-
-        when(transactionRepository.findById(10L))
-                .thenReturn(Optional.of(pendingTx));
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
+        when(transactionRepository.save(any(Transaction.class))).thenReturn(txCreated);
+        when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(txCreated));
 
         assertThrows(BadRequestException.class,
-                () -> transactionService.transfer(transactionRequestDto, userId));
-        ArgumentCaptor<Transaction> txCaptor = ArgumentCaptor.forClass(Transaction.class);
-        verify(transactionRepository, atLeastOnce()).save(txCaptor.capture());
-        List<Transaction> allSaves = txCaptor.getAllValues();
-        Transaction last = allSaves.get(allSaves.size() - 1);
+                () -> transactionService.transfer(transactionRequestDto, userId, idempotencyKey));
 
-        assertEquals("Debit failed: Debit failed", last.getErrorMessage());
-        assertNotNull(last.getUpdatedAt());
+        ArgumentCaptor<Transaction> txCaptor = ArgumentCaptor.forClass(Transaction.class);
+        verify(transactionRepository, atLeast(2)).save(txCaptor.capture());
+
+        Transaction last = txCaptor.getAllValues().stream()
+                .filter(t -> t.getStatus() == Status.FAILED)
+                .findFirst().orElseThrow();
+
         assertEquals(Status.FAILED, last.getStatus());
-        verify(accountClient,never()).credit(anyLong(),any(),anyLong());
+        assertTrue(last.getErrorMessage().contains("Debit failed"));
+
+        verify(accountClient, never()).credit(anyLong(), any(), anyLong());
     }
     @Test
     @DisplayName("Credit failed - rollback succeed")
-    void testCreditFailsRollbackSuccess(){
+    void testCreditFailsRollbackSuccess() {
+        fromAccount.setBalance(BigDecimal.valueOf(1000));
+
         when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
         when(accountClient.getAccountById(2L)).thenReturn(toAccount);
 
         doNothing().when(accountClient).debit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
+
         FeignException feignException = mock(FeignException.class);
         when(feignException.getMessage()).thenReturn("Credit failed");
 
         doThrow(feignException)
                 .when(accountClient).credit(eq(2L), eq(BigDecimal.valueOf(100)), anyLong());
+
         doNothing().when(accountClient).credit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
 
-        when(transactionRepository.save(any(Transaction.class))).thenReturn(pendingTx);
-        when(transactionRepository.findById(10L)).thenReturn(Optional.of(pendingTx));
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
+        when(transactionRepository.save(any(Transaction.class))).thenReturn(txCreated);
+        when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(txCreated));
 
-         transactionService.transfer(transactionRequestDto, userId);
+        assertThrows(BadRequestException.class,
+                () -> transactionService.transfer(transactionRequestDto, userId, idempotencyKey));
+
         ArgumentCaptor<Transaction> txCaptor = ArgumentCaptor.forClass(Transaction.class);
-        verify(transactionRepository, atLeastOnce()).save(txCaptor.capture());
-        List<Transaction> allSaves = txCaptor.getAllValues();
-        Transaction last = allSaves.get(allSaves.size() - 1);
-        assertEquals(Status.FAILED, last.getStatus());
-        assertEquals(RollBackStatus.SUCCESS, last.getRollbackStatus());
-        assertNotNull(last.getUpdatedAt());
-        assertTrue(last.getErrorMessage() == null || last.getErrorMessage().isEmpty()
-                || last.getErrorMessage().contains("Credit failed. Rollback applied"));
+        verify(transactionRepository, atLeast(4)).save(txCaptor.capture());
 
+        Transaction last = txCaptor.getAllValues().stream()
+                .filter(t -> t.getStatus() == Status.FAILED)
+                .findFirst().orElseThrow();
+
+        assertEquals(Status.FAILED, last.getStatus());
+        assertTrue(last.getErrorMessage().contains("Transfer failed"));
 
         verify(accountClient).debit(1L, BigDecimal.valueOf(100), 10L);
         verify(accountClient).credit(2L, BigDecimal.valueOf(100), 10L);
         verify(accountClient).credit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
-
     }
     @Test
     @DisplayName("Credit failed - rollback failed")
-    void testCreditFailsRollbackFailed(){
-
+    void testCreditFailsRollbackFailed() {
         when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
         when(accountClient.getAccountById(2L)).thenReturn(toAccount);
 
         doNothing().when(accountClient).debit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
-        FeignException feignException = mock(FeignException.class);
-        when(feignException.getMessage()).thenReturn("Credit failed");
 
-        doThrow(feignException)
+        FeignException feignCredit = mock(FeignException.class);
+        when(feignCredit.getMessage()).thenReturn("Credit failed");
+
+        FeignException feignCompensate = mock(FeignException.class);
+
+        doThrow(feignCredit)
                 .when(accountClient).credit(eq(2L), eq(BigDecimal.valueOf(100)), anyLong());
-        doThrow(feignException)
+        doThrow(new RuntimeException("Compensation failed", feignCompensate))
                 .when(accountClient).credit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
-        when(transactionRepository.save(any(Transaction.class))).thenReturn(pendingTx);
-        when(transactionRepository.findById(10L)).thenReturn(Optional.of(pendingTx));
-         transactionService.transfer(transactionRequestDto, userId);
+
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
+
+        when(transactionRepository.save(any(Transaction.class))).thenReturn(txCreated);
+
+        when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(txCreated));
+
+        assertThrows(BadRequestException.class,
+                () -> transactionService.transfer(transactionRequestDto, userId, idempotencyKey));
+
         ArgumentCaptor<Transaction> txCaptor = ArgumentCaptor.forClass(Transaction.class);
-        verify(transactionRepository, atLeastOnce()).save(txCaptor.capture());
-        List<Transaction> allSaves = txCaptor.getAllValues();
-        Transaction last = allSaves.get(allSaves.size() - 1);
+        verify(transactionRepository, atLeast(4)).save(txCaptor.capture());
+
+        Transaction last = txCaptor.getAllValues().stream()
+                .filter(t -> t.getStatus() == Status.FAILED)
+                .findFirst().orElseThrow();
 
         assertEquals(Status.FAILED, last.getStatus());
-        assertEquals(RollBackStatus.FAILED, last.getRollbackStatus());
-        assertNotNull(last.getUpdatedAt());
-        assertTrue(last.getErrorMessage().contains("Rollback failed"));
+        assertTrue(last.getErrorMessage().contains("Compensation failed"));
 
         verify(accountClient).debit(1L, BigDecimal.valueOf(100), 10L);
         verify(accountClient).credit(2L, BigDecimal.valueOf(100), 10L);
-        verify(accountClient).credit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
+        verify(accountClient).credit(1L, BigDecimal.valueOf(100), 10L);
     }
     @Test
-    @DisplayName("Unexpected exception → ERROR")
-    void testUnexpectedException() {
+    @DisplayName("Idempotency: Existing COMPLETED transaction")
+    void testIdempotency_Completed() {
+        txInProgress.setStatus(Status.COMPLETED);
+        txInProgress.setStep(TransactionStep.CREDIT_DONE);
+
         when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
         when(accountClient.getAccountById(2L)).thenReturn(toAccount);
 
-        doNothing().when(accountClient).debit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
-        doThrow(new RuntimeException("Unexpected crash"))
-                .when(accountClient).credit(eq(2L), eq(BigDecimal.valueOf(100)), anyLong());
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.of(txInProgress));
 
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction t = invocation.getArgument(0);
-                    if (t.getId() == null) {
-                        t.setId(10L);
-                    }
-                    return t;
-                });
+        TransactionResponseDto result = transactionService.transfer(transactionRequestDto, userId, idempotencyKey);
 
-        when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(pendingTx));
-        assertThrows(InternalServerErrorException.class,
-                () -> transactionService.transfer(transactionRequestDto, userId));
+        assertNotNull(result);
+        assertEquals(Status.COMPLETED, result.getStatus());
 
-        ArgumentCaptor<Transaction> txCaptor = ArgumentCaptor.forClass(Transaction.class);
-        verify(transactionRepository, atLeastOnce()).save(txCaptor.capture());
-        List<Transaction> allSaves = txCaptor.getAllValues();
-        Transaction last = allSaves.get(allSaves.size() - 1);
-
-        assertEquals(Status.ERROR, last.getStatus());
-        assertTrue(last.getErrorMessage().contains("Unexpected crash"));
-        assertNotNull(last.getUpdatedAt());
-
-        verify(accountClient, never()).credit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
+        verify(accountClient, times(1)).getAccountById(1L);
+        verify(accountClient, times(1)).getAccountById(2L);
+        verify(transactionRepository, never()).save(any());
     }
     @Test
-    @DisplayName("Validate: account does not belong to user → BadRequest")
-    void testValidateForeignAccount() {
-        fromAccount.setUserId(999L);
+    @DisplayName("Idempotency: Existing PROCESSING transaction -> Conflict")
+    void testIdempotency_Processing() {
         when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
         when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.of(txInProgress));
+
+        ConflictException ex = assertThrows(ConflictException.class,
+                () -> transactionService.transfer(transactionRequestDto, userId, idempotencyKey));
+
+        assertNotNull(ex.getPayload());
+
+        verify(accountClient, times(1)).getAccountById(1L);
+        verify(accountClient, times(1)).getAccountById(2L);
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Idempotency: Concurrent creation -> DataIntegrityViolation")
+    void testIdempotency_ConcurrentCreation() {
+        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
+        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(txCreated));
+
         when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction t = invocation.getArgument(0);
-                    if (t.getId() == null) t.setId(10L);
-                    return t;
-                });
-        when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(pendingTx));
-        assertThrows(BadRequestException.class,
-                () -> transactionService.transfer(transactionRequestDto, 100L));
+                .thenThrow(DataIntegrityViolationException.class);
+
+        ConflictException ex = assertThrows(ConflictException.class,
+                () -> transactionService.transfer(transactionRequestDto, userId, idempotencyKey));
+
+        assertNotNull(ex.getPayload());
+        verify(transactionRepository, times(2)).findByIdempotencyKey(idempotencyKey);
+        verify(transactionRepository, times(1)).save(any(Transaction.class));
     }
     @Test
-    @DisplayName("Validate: same account → BadRequest")
+    @DisplayName("Validate: Foreign source account -> NotFound (via validateAccountOwnership)")
+    void testValidateForeignSourceAccount() {
+        when(accountClient.getAccountById(1L)).thenThrow(new NotFoundException("Account not found or access denied."));
+
+        assertThrows(NotFoundException.class,
+                () -> transactionService.transfer(transactionRequestDto, userId, idempotencyKey));
+
+        verify(accountClient, times(1)).getAccountById(1L);
+        verify(accountClient, never()).getAccountById(2L);
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Validate: Same account -> BadRequest")
     void testValidateSameAccount() {
-        transactionRequestDto.setToAccountId(1L);
+        transactionRequestDto.setTargetAccountId(1L);
 
         when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction t = invocation.getArgument(0);
-                    if (t.getId() == null) t.setId(10L);
-                    return t;
-                });
-        when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(pendingTx));
+
         assertThrows(BadRequestException.class,
-                () -> transactionService.transfer(transactionRequestDto, 100L));
+                () -> transactionService.transfer(transactionRequestDto, userId, idempotencyKey));
     }
+
     @Test
-    @DisplayName("Validate: account closed → BadRequest")
+    @DisplayName("Validate: Account closed -> BadRequest")
     void testValidateAccountClosed() {
-        transactionRequestDto.setToAccountId(1L);
         fromAccount.setStatus(StatusAccount.CLOSED);
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction t = invocation.getArgument(0);
-                    if (t.getId() == null) t.setId(10L);
-                    return t;
-                });
-        when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(pendingTx));
-        assertThrows(BadRequestException.class,
-                () -> transactionService.transfer(transactionRequestDto, 100L));
 
+        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
+        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+
+        assertThrows(BadRequestException.class,
+                () -> transactionService.transfer(transactionRequestDto, userId, idempotencyKey));
     }
+
     @Test
-    @DisplayName("Validate: currency mismatch → BadRequest")
+    @DisplayName("Validate: Currency mismatch -> BadRequest")
     void testValidateDifferentCurrencies() {
         toAccount.setCurrency(Currency.EUR);
 
         when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
         when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction t = invocation.getArgument(0);
-                    if (t.getId() == null) t.setId(10L);
-                    return t;
-                });
-        when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(pendingTx));
+
         assertThrows(BadRequestException.class,
-                () -> transactionService.transfer(transactionRequestDto, 100L));
+                () -> transactionService.transfer(transactionRequestDto, userId, idempotencyKey));
     }
+
     @Test
-    @DisplayName("Validate: not enough money → BadRequest")
+    @DisplayName("Validate: Not enough money -> BadRequest")
     void testValidateNotEnoughMoney() {
         fromAccount.setBalance(BigDecimal.valueOf(50));
 
         when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
         when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction t = invocation.getArgument(0);
-                    if (t.getId() == null) t.setId(10L);
-                    return t;
-                });
-        when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(pendingTx));
+
         assertThrows(BadRequestException.class,
-                () -> transactionService.transfer(transactionRequestDto, 100L));
+                () -> transactionService.transfer(transactionRequestDto, userId, idempotencyKey));
+    }
+    @Test
+    @DisplayName("Unexpected exception during SAGA -> InternalServerError")
+    void testUnexpectedExceptionDuringSaga() {
+        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
+        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+
+        doNothing().when(accountClient).debit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
+        doThrow(new RuntimeException("Database connection lost"))
+                .when(accountClient).credit(eq(2L), eq(BigDecimal.valueOf(100)), anyLong());
+
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
+        when(transactionRepository.save(any(Transaction.class))).thenReturn(txCreated);
+        when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(txCreated));
+
+        assertThrows(InternalServerErrorException.class,
+                () -> transactionService.transfer(transactionRequestDto, userId, idempotencyKey));
+
+        ArgumentCaptor<Transaction> txCaptor = ArgumentCaptor.forClass(Transaction.class);
+        verify(transactionRepository, atLeast(3)).save(txCaptor.capture());
+
+        verify(accountClient, never()).credit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
+
+        Transaction last = txCaptor.getAllValues().stream()
+                .filter(t -> t.getStatus() == Status.FAILED)
+                .findFirst().orElseThrow();
+
+        assertEquals(Status.FAILED, last.getStatus());
+        assertTrue(last.getErrorMessage().contains("Unexpected error"));
     }
 }
