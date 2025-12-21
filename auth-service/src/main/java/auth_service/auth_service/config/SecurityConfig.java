@@ -13,6 +13,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -59,7 +60,6 @@ public class SecurityConfig {
                                                    JwtAuthFilter jwtAuthFilter) throws Exception {
              http.csrf(AbstractHttpConfigurer::disable)
                      .authorizeHttpRequests(auth -> auth
-                             // ПУБЛИЧНЫЕ ЭНДПОИНТЫ
                              .requestMatchers(
                                      "/api/auth/**",
                                      "/swagger-ui/**",
@@ -68,6 +68,7 @@ public class SecurityConfig {
                              .requestMatchers("/api/admin/**").hasRole("ADMIN")
                              .requestMatchers("/api/user/**").hasRole("USER")
                              .anyRequest().authenticated())
+                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                      .authenticationProvider(authenticationProvider)
                      .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                      .httpBasic(AbstractHttpConfigurer::disable);

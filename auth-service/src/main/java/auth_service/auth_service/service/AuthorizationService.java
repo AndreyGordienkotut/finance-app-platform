@@ -16,15 +16,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -45,7 +42,7 @@ public class AuthorizationService {
         Users user = new Users();
         user.setEmail(registerRequestDto.getEmail());
         user.setPassword(passwordEncoder.encode(registerRequestDto.getPassword()));
-        user.setUsername(registerRequestDto.getEmail());
+        user.setUsername(registerRequestDto.getUsername()); //change
         user.setRole(Role.CLIENT);
         user.setVerified(false);
         Users savedUser = userRepository.save(user);
@@ -57,20 +54,20 @@ public class AuthorizationService {
                 .expiryAt(LocalDateTime.now().plusHours(24))
                 .build();
         emailVerificationTokensRepository.save(emailVerificationTokens);
-        Map<String, Object> extra = new HashMap<>();
-        extra.put("userId", user.getId());
-        String jwtAccessToken = jwtService.generateToken(extra, user);
+        Map<String, Object> extraClaims = Map.of("userId", savedUser.getId());
+        String jwtAccessToken = jwtService.generateToken(extraClaims, savedUser);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(savedUser.getId());
-        return AuthenticationResponseDto.builder()
-                .token(jwtAccessToken)
-                .refreshToken(refreshToken.getToken())
-                .userId(savedUser.getId())
-                .username(savedUser.getUsername())
-                .email(savedUser.getEmail())
-                .build();
+
+        return createAuthResponse(savedUser, jwtAccessToken, refreshToken.getToken());
     }
     @Transactional
     public AuthenticationResponseDto authenticate(AuthenticationRequestDto authenticationRequestDto) {
+        Users user = userRepository.findByEmail(authenticationRequestDto.getEmail())
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password."));
+
+        if (!user.isVerified()) {
+            throw new BadRequestException("Email is not verified. Please check your inbox.");
+        }
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
@@ -82,21 +79,11 @@ public class AuthorizationService {
             System.err.println("Authentication failed for user " + authenticationRequestDto.getEmail() + ": " + e.getMessage());
             throw new InvalidCredentialsException("Invalid email or password.");
         }
-        Users user = userRepository.findByEmail(authenticationRequestDto.getEmail()).orElseThrow(()-> new UsernameNotFoundException("User not found with email: " +authenticationRequestDto.getEmail()));
-        if (!user.isVerified()) {
-            throw new BadRequestException("Email is not verified. Please check your inbox.");
-        }
-        Map<String, Object> extra = new HashMap<>();
-        extra.put("userId", user.getId());
-        String jwtAccessToken = jwtService.generateToken(extra, user);
+        Map<String, Object> extraClaims = Map.of("userId", user.getId());
+        String jwtAccessToken = jwtService.generateToken(extraClaims, user);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getId());
-        return AuthenticationResponseDto.builder()
-                .token(jwtAccessToken)
-                .refreshToken(refreshToken.getToken())
-                .userId(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .build();
+
+        return createAuthResponse(user, jwtAccessToken, refreshToken.getToken());
     }
     @Transactional
     public AuthenticationResponseDto refreshToken(RefreshTokenRequestDto request) {
@@ -106,22 +93,25 @@ public class AuthorizationService {
         refreshTokenService.verifyExpiration(refreshToken);
 
         Users user = refreshToken.getUser();
-        String newAccessToken = jwtService.generateToken(user);
+        Map<String, Object> extraClaims = Map.of("userId", user.getId());
+        String newAccessToken = jwtService.generateToken(extraClaims, user);
 
+        return createAuthResponse(user, newAccessToken, refreshToken.getToken());
+    }
+    @Transactional
+    public void logout(String refreshToken) {
+        refreshTokenService.findByToken(refreshToken)
+                .ifPresent(refreshTokenService::delete);
+    }
+
+    private AuthenticationResponseDto createAuthResponse(Users user, String accessToken, String refreshToken) {
         return AuthenticationResponseDto.builder()
-                .token(newAccessToken)
-                .refreshToken(refreshToken.getToken())
+                .token(accessToken)
+                .refreshToken(refreshToken)
                 .userId(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .build();
-    }
-    @Transactional
-    public void logout(String refreshToken) {
-        Optional<RefreshToken> tokenOptional = refreshTokenService.findByToken(refreshToken);
-        if (tokenOptional.isPresent()) {
-            refreshTokenService.delete(tokenOptional.get());
-        }
     }
 
 
