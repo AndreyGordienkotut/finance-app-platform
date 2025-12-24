@@ -10,11 +10,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.domain.Page;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import transaction_service.transaction_service.service.TransactionService;
 
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -22,6 +25,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
+
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -43,7 +47,7 @@ class TransactionIntegrationSecurityTest {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("roles", roles);
-        claims.put("sub", "test@mail.com");
+        claims.put("sub", String.valueOf(userId));
 
         return Jwts.builder()
                 .setClaims(claims)
@@ -52,33 +56,42 @@ class TransactionIntegrationSecurityTest {
                 .signWith(Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret)))
                 .compact();
     }
-
     @Test
-    @DisplayName("IT: No JWT -> 403 Forbidden")
-    void noToken_ShouldReturn403() throws Exception {
-        mockMvc.perform(get("/api/test/history")
+    @DisplayName("GET /history Without JWT -> 403 Forbidden")
+    void history_NoToken_ShouldReturn403() throws Exception {
+        mockMvc.perform(get("/api/transaction/history")
                         .param("accountId", "1"))
                 .andExpect(status().isForbidden());
     }
 
     @Test
-    @DisplayName("IT: Valid JWT + ROLE_USER -> 200 OK")
-    void validToken_ShouldReturn200() throws Exception {
-        String token = generateRealToken(1L, List.of("ROLE_USER"));
+    @DisplayName("GET /history Valid JWT -> 200 OK")
+    void history_ValidToken_ShouldReturn200() throws Exception {
+        Long mockUserId = 1L;
+        String token = generateRealToken(mockUserId, List.of("ROLE_USER"));
 
-        mockMvc.perform(get("/api/test/test-principal")
+        when(transactionService.getHistory(anyLong(), any(), eq(mockUserId)))
+                .thenReturn(Page.empty());
+
+        mockMvc.perform(get("/api/transaction/history")
                         .header("Authorization", "Bearer " + token)
-                        .param("accountId", "1"))
+                        .param("accountId", "1")
+                        .param("page", "0")
+                        .param("size", "10"))
                 .andExpect(status().isOk());
     }
 
     @Test
-    @DisplayName("IT: Valid JWT + Wrong Role -> 403 Forbidden")
-    void wrongRole_ShouldReturn403() throws Exception {
-        String token = generateRealToken(1L, List.of("ROLE_USER"));
+    @DisplayName("GET /history With Invalid Sign -> 403 Forbidden")
+    void history_InvalidSign_ShouldReturn403() throws Exception {
+        String badToken = Jwts.builder()
+                .setSubject("1")
+                .signWith(Keys.hmacShaKeyFor("wrong-secret-length-must-be-very-long-and-secure-123".getBytes()))
+                .compact();
 
-        mockMvc.perform(get("/api/test/admin-stats")
-                        .header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/api/transaction/history")
+                        .header("Authorization", "Bearer " + badToken)
+                        .param("accountId", "1"))
                 .andExpect(status().isForbidden());
     }
 }
