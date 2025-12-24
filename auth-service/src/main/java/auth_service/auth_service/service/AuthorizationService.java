@@ -4,6 +4,7 @@ import auth_service.auth_service.dto.AuthenticationRequestDto;
 import auth_service.auth_service.dto.AuthenticationResponseDto;
 import auth_service.auth_service.dto.RefreshTokenRequestDto;
 import auth_service.auth_service.dto.RegisterRequestDto;
+import core.core.config.JwtClaims;
 import core.core.exception.*;
 import auth_service.auth_service.model.EmailVerification;
 import auth_service.auth_service.model.RefreshToken;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -54,7 +56,11 @@ public class AuthorizationService {
                 .expiryAt(LocalDateTime.now().plusHours(24))
                 .build();
         emailVerificationTokensRepository.save(emailVerificationTokens);
-        Map<String, Object> extraClaims = Map.of("userId", savedUser.getId());
+//        Map<String, Object> extraClaims = Map.of("userId", savedUser.getId());
+        Map<String, Object> extraClaims = Map.of(
+                JwtClaims.USER_ID, savedUser.getId(),
+                JwtClaims.ROLES, List.of("ROLE_" + savedUser.getRole().name())
+        );
         String jwtAccessToken = jwtService.generateToken(extraClaims, savedUser);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(savedUser.getId());
 
@@ -79,7 +85,10 @@ public class AuthorizationService {
             System.err.println("Authentication failed for user " + authenticationRequestDto.getEmail() + ": " + e.getMessage());
             throw new InvalidCredentialsException("Invalid email or password.");
         }
-        Map<String, Object> extraClaims = Map.of("userId", user.getId());
+        Map<String, Object> extraClaims = Map.of(
+                JwtClaims.USER_ID, user.getId(),
+                JwtClaims.ROLES, List.of("ROLE_" + user.getRole().name())
+        );
         String jwtAccessToken = jwtService.generateToken(extraClaims, user);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getId());
 
@@ -93,7 +102,10 @@ public class AuthorizationService {
         refreshTokenService.verifyExpiration(refreshToken);
 
         Users user = refreshToken.getUser();
-        Map<String, Object> extraClaims = Map.of("userId", user.getId());
+        Map<String, Object> extraClaims = Map.of(
+                JwtClaims.USER_ID, user.getId(),
+                JwtClaims.ROLES, List.of("ROLE_" + user.getRole().name())
+        );
         String newAccessToken = jwtService.generateToken(extraClaims, user);
 
         return createAuthResponse(user, newAccessToken, refreshToken.getToken());

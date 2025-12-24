@@ -11,6 +11,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.Page;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -92,6 +93,23 @@ class TransactionIntegrationSecurityTest {
         mockMvc.perform(get("/api/transaction/history")
                         .header("Authorization", "Bearer " + badToken)
                         .param("accountId", "1"))
+                .andExpect(status().isForbidden());
+    }
+    @Test
+    @DisplayName("IT: User tries to access someone else's account -> 403 Forbidden")
+    void getHistory_OtherUserAccount_ShouldReturn403() throws Exception {
+        Long myUserId = 1L;
+        Long foreignAccountId = 999L;
+        String token = generateRealToken(myUserId, List.of("ROLE_USER"));
+
+        when(transactionService.getHistory(eq(foreignAccountId), any(), eq(myUserId)))
+                .thenThrow(new AccessDeniedException("You do not own this account"));
+
+        mockMvc.perform(get("/api/transaction/history")
+                        .header("Authorization", "Bearer " + token)
+                        .param("accountId", foreignAccountId.toString())
+                        .param("page", "0")
+                        .param("size", "10"))
                 .andExpect(status().isForbidden());
     }
 }
