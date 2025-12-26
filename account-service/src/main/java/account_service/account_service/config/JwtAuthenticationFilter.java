@@ -1,6 +1,8 @@
 package account_service.account_service.config;
 
 
+import core.core.config.JwtClaims;
+import core.core.dto.AuthenticatedUser;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -46,24 +48,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             Claims claims = jwtUtil.extractAllClaims(token);
 
             String email = claims.getSubject();
-            Object rolesObj = claims.get("roles");
+            Long userId = claims.get(JwtClaims.USER_ID, Long.class);
+            List<String> roles = claims.get(JwtClaims.ROLES, List.class);
 
-            if (email == null || email.isEmpty()) {
-                filterChain.doFilter(request, response);
-                return;
+            if (email != null && userId != null) {
+                List<SimpleGrantedAuthority> authorities = roles == null ? List.of() :
+                        roles.stream().map(SimpleGrantedAuthority::new).toList();
+
+                AuthenticatedUser principal = new AuthenticatedUser(userId, email, authorities);
+
+                UsernamePasswordAuthenticationToken auth =
+                        new UsernamePasswordAuthenticationToken(principal, null, authorities);
+
+                SecurityContextHolder.getContext().setAuthentication(auth);
             }
-
-            List<String> roles = (rolesObj instanceof List) ? (List<String>) rolesObj : List.of();
-            List<SimpleGrantedAuthority> authorities = roles.stream()
-                    .map(SimpleGrantedAuthority::new)
-                    .toList();
-
-            User userPrincipal = new User(email, "", authorities);
-
-            UsernamePasswordAuthenticationToken auth =
-                    new UsernamePasswordAuthenticationToken(userPrincipal, null, authorities);
-
-            SecurityContextHolder.getContext().setAuthentication(auth);
         }
 
         filterChain.doFilter(request, response);

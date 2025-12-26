@@ -21,6 +21,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/account/*/debit", "/api/account/*/credit").hasRole("SYSTEM")
                         .requestMatchers("/api/account/**").authenticated()
+                        .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().denyAll());
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
