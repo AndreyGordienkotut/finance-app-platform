@@ -18,6 +18,7 @@ import org.mockito.Mock;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -78,7 +79,7 @@ public class AuthorizationServiceTest {
             return u;
         });
 
-        when(jwtService.generateToken(anyMap(), any())).thenReturn("jwt");
+        when(jwtService.generateToken(any(UserDetails.class), anyLong())).thenReturn("jwt");
         when(refreshTokenService.createRefreshToken(anyLong())).thenReturn(RefreshToken.builder().token("rf").build());
 
         authorizationService.register(regDto);
@@ -107,7 +108,7 @@ public class AuthorizationServiceTest {
     void authenticate_Success() {
         AuthenticationRequestDto authDto = new AuthenticationRequestDto("test@mail.com", "pass123");
         when(userRepository.findByEmail("test@mail.com")).thenReturn(Optional.of(testUser));
-        when(jwtService.generateToken(anyMap(), eq(testUser))).thenReturn("jwt");
+        when(jwtService.generateToken(any(UserDetails.class), anyLong())).thenReturn("jwt");
         when(refreshTokenService.createRefreshToken(1L)).thenReturn(RefreshToken.builder().token("rf").build());
 
         var response = authorizationService.authenticate(authDto);
@@ -154,12 +155,14 @@ public class AuthorizationServiceTest {
     void refreshToken_Success_ConsistentClaims() {
         RefreshToken rf = RefreshToken.builder().token("old_rf").user(testUser).build();
         when(refreshTokenService.findByToken("old_rf")).thenReturn(Optional.of(rf));
-        when(jwtService.generateToken(anyMap(), eq(testUser))).thenReturn("new_jwt");
+        when(jwtService.generateToken(any(UserDetails.class), anyLong())).thenReturn("jwt");
 
         authorizationService.refreshToken(new RefreshTokenRequestDto("old_rf"));
-        ArgumentCaptor<Map<String, Object>> claimsCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(jwtService).generateToken(claimsCaptor.capture(), eq(testUser));
-        assertEquals(1L, claimsCaptor.getValue().get( "userId"));
+        ArgumentCaptor<Long> userIdCaptor = ArgumentCaptor.forClass(Long.class);
+
+        verify(jwtService).generateToken(eq(testUser), userIdCaptor.capture());
+
+        assertEquals(testUser.getId(), userIdCaptor.getValue());
     }
     @Test
     @DisplayName("Refresh: Should throw Exception if token not found")
@@ -189,7 +192,7 @@ public class AuthorizationServiceTest {
     void refreshToken_Success_ShouldNotRecreateToken() {
         RefreshToken rf = RefreshToken.builder().token("existing_refresh_token").user(testUser).build();
         when(refreshTokenService.findByToken(anyString())).thenReturn(Optional.of(rf));
-        when(jwtService.generateToken(anyMap(), eq(testUser))).thenReturn("new_access_token");
+        when(jwtService.generateToken(any(UserDetails.class), anyLong())).thenReturn("jwt");
 
         authorizationService.refreshToken(new RefreshTokenRequestDto("existing_refresh_token"));
 

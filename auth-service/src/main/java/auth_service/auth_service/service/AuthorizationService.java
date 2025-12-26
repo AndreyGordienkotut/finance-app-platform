@@ -57,11 +57,7 @@ public class AuthorizationService {
                 .build();
         emailVerificationTokensRepository.save(emailVerificationTokens);
 //        Map<String, Object> extraClaims = Map.of("userId", savedUser.getId());
-        Map<String, Object> extraClaims = Map.of(
-                JwtClaims.USER_ID, savedUser.getId(),
-                JwtClaims.ROLES, List.of("ROLE_" + savedUser.getRole().name())
-        );
-        String jwtAccessToken = jwtService.generateToken(extraClaims, savedUser);
+        String jwtAccessToken = jwtService.generateToken(user, user.getId());
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(savedUser.getId());
 
         return createAuthResponse(savedUser, jwtAccessToken, refreshToken.getToken());
@@ -85,11 +81,7 @@ public class AuthorizationService {
             System.err.println("Authentication failed for user " + authenticationRequestDto.getEmail() + ": " + e.getMessage());
             throw new InvalidCredentialsException("Invalid email or password.");
         }
-        Map<String, Object> extraClaims = Map.of(
-                JwtClaims.USER_ID, user.getId(),
-                JwtClaims.ROLES, List.of("ROLE_" + user.getRole().name())
-        );
-        String jwtAccessToken = jwtService.generateToken(extraClaims, user);
+        String jwtAccessToken = jwtService.generateToken(user, user.getId());
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getId());
 
         return createAuthResponse(user, jwtAccessToken, refreshToken.getToken());
@@ -102,11 +94,7 @@ public class AuthorizationService {
         refreshTokenService.verifyExpiration(refreshToken);
 
         Users user = refreshToken.getUser();
-        Map<String, Object> extraClaims = Map.of(
-                JwtClaims.USER_ID, user.getId(),
-                JwtClaims.ROLES, List.of("ROLE_" + user.getRole().name())
-        );
-        String newAccessToken = jwtService.generateToken(extraClaims, user);
+        String newAccessToken = jwtService.generateToken(user, user.getId());
 
         return createAuthResponse(user, newAccessToken, refreshToken.getToken());
     }
