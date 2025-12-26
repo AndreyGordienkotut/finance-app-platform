@@ -110,7 +110,22 @@ public class GlobalExceptionHandler {
         log.warn("API Error (409): {} Path: {}", ex.getMessage(), request.getRequestURI());
         return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
     }
+    //Limit 429
+    @ExceptionHandler(LimitExceededException.class)
+    public ResponseEntity<ApiError> handleLimitExceededException(
+            LimitExceededException ex, HttpServletRequest request) {
 
+        ApiError apiError = new ApiError(
+                LocalDateTime.now(),
+                HttpStatus.TOO_MANY_REQUESTS.value(),
+                "Limit Exceeded",
+                ex.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+        log.warn("Limit Exceeded (429): {} Path: {}", ex.getMessage(), request.getRequestURI());
+        return new ResponseEntity<>(apiError, HttpStatus.TOO_MANY_REQUESTS);
+    }
     //500 Internal Server Error
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleGeneralException(

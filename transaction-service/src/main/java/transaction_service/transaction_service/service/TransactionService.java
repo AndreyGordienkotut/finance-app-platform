@@ -30,7 +30,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class TransactionService {
     private final TransactionRepository transactionRepository;
+    private final LimitService limitService;
     private final AccountClient accountClient;
+
 
     public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
@@ -39,7 +41,7 @@ public class TransactionService {
 
         AccountResponseDto from = validateAccountOwnership(dto.getSourceAccountId(), userId);
         AccountResponseDto to = accountClient.getAccountById(dto.getTargetAccountId());
-
+        limitService.checkTransactionLimit(userId, dto.getAmount());
         validateAccounts(from, to, dto, userId);
 
         return processTransaction(
@@ -57,7 +59,7 @@ public class TransactionService {
             throw new BadRequestException("Idempotency-Key header is required.");
         }
 
-
+        limitService.checkTransactionLimit(userId, dto.getAmount());
         AccountResponseDto targetAccount = validateAccountOwnership(dto.getTargetAccountId(), userId);
         if (!targetAccount.getUserId().equals(userId)) {
             throw new BadRequestException("Account does not belong to you");
@@ -79,7 +81,7 @@ public class TransactionService {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new BadRequestException("Idempotency-Key header is required.");
         }
-
+        limitService.checkTransactionLimit(userId, dto.getAmount());
         AccountResponseDto sourceAccount = validateAccountOwnership(dto.getSourceAccountId(), userId);
 
         validateWithdraw(sourceAccount, dto, userId);
@@ -165,6 +167,7 @@ public class TransactionService {
     public Transaction createTransaction(Long sourceId, Long targetId, BigDecimal amount,
                                          Currency currency, TypeTransaction type, String idempotencyKey) {
         Transaction tx = Transaction.builder()
+                .userId(sourceId)
                 .sourceAccountId(sourceId)
                 .targetAccountId(targetId)
                 .amount(amount)
