@@ -1,9 +1,13 @@
 package transaction_service.transaction_service.service;
+import core.core.dto.AccountResponseDto;
 import core.core.exception.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import transaction_service.transaction_service.dto.LimitResponseDto;
+import transaction_service.transaction_service.dto.TransactionResponseDto;
+import transaction_service.transaction_service.model.Transaction;
 import transaction_service.transaction_service.model.TransactionLimit;
 import transaction_service.transaction_service.repository.TransactionLimitRepository;
 import transaction_service.transaction_service.repository.TransactionRepository;
@@ -39,19 +43,22 @@ public class LimitService {
         }
     }
     @Transactional(readOnly = true)
-    public TransactionLimit getLimits(Long userId) {
-        return transactionLimitRepository.findByUserId(userId)
-                .orElseGet(() -> new TransactionLimit(null, userId, DEFAULT_DAILY_LIMIT, DEFAULT_SINGLE_LIMIT));
+    public LimitResponseDto getLimits(Long userId) {
+        TransactionLimit limit = transactionLimitRepository.findByUserId(userId)
+                .orElseGet(() -> createDefaultLimit(userId));
+        return convertToDto(limit);
     }
 
     @Transactional
-    public TransactionLimit updateLimits(Long userId, BigDecimal daily, BigDecimal single) {
+    public LimitResponseDto updateLimits(Long userId, BigDecimal daily, BigDecimal single) {
         TransactionLimit limit = transactionLimitRepository.findByUserId(userId)
-                .orElse(new TransactionLimit(null, userId, DEFAULT_DAILY_LIMIT, DEFAULT_SINGLE_LIMIT));
+                .orElse(createDefaultLimit(userId));
 
         limit.setDailyLimit(daily);
         limit.setSingleLimit(single);
-        return transactionLimitRepository.save(limit);
+
+        TransactionLimit savedLimit = transactionLimitRepository.save(limit);
+        return convertToDto(savedLimit);
     }
     private TransactionLimit createDefaultLimit(Long userId) {
         TransactionLimit newLimit = new TransactionLimit();
@@ -60,4 +67,11 @@ public class LimitService {
         newLimit.setSingleLimit(DEFAULT_SINGLE_LIMIT);
         return transactionLimitRepository.save(newLimit);
     }
+    private LimitResponseDto convertToDto(TransactionLimit limit) {
+        return new LimitResponseDto(
+              limit.getDailyLimit(),
+                limit.getSingleLimit()
+        );
+    }
+
 }
