@@ -41,7 +41,6 @@ public class TransactionService {
 
         AccountResponseDto from = validateAccountOwnership(dto.getSourceAccountId(), userId);
         AccountResponseDto to = accountClient.getAccountById(dto.getTargetAccountId());
-        limitService.checkTransactionLimit(userId, dto.getAmount());
         validateAccounts(from, to, dto, userId);
 
         return processTransaction(
@@ -50,7 +49,8 @@ public class TransactionService {
             dto.getAmount(),
             from.getCurrency(),
             TypeTransaction.TRANSFER,
-            idempotencyKey
+            idempotencyKey,
+                userId
         );
     }
 
@@ -58,8 +58,6 @@ public class TransactionService {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new BadRequestException("Idempotency-Key header is required.");
         }
-
-        limitService.checkTransactionLimit(userId, dto.getAmount());
         AccountResponseDto targetAccount = validateAccountOwnership(dto.getTargetAccountId(), userId);
         if (!targetAccount.getUserId().equals(userId)) {
             throw new BadRequestException("Account does not belong to you");
@@ -74,14 +72,15 @@ public class TransactionService {
                 dto.getAmount(),
                 targetAccount.getCurrency(),
                 TypeTransaction.DEPOSIT,
-                idempotencyKey
+                idempotencyKey,
+                userId
         );
     }
     public TransactionResponseDto withdraw(WithdrawRequestDto dto, Long userId, String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new BadRequestException("Idempotency-Key header is required.");
         }
-        limitService.checkTransactionLimit(userId, dto.getAmount());
+
         AccountResponseDto sourceAccount = validateAccountOwnership(dto.getSourceAccountId(), userId);
 
         validateWithdraw(sourceAccount, dto, userId);
@@ -92,7 +91,8 @@ public class TransactionService {
                 dto.getAmount(),
                 sourceAccount.getCurrency(),
                 TypeTransaction.WITHDRAW,
-                idempotencyKey
+                idempotencyKey,
+                userId
         );
     }
     public Page<TransactionResponseDto> getHistory(Long accountId, Pageable pageable,Long userId) {
@@ -108,7 +108,8 @@ public class TransactionService {
     }
     private TransactionResponseDto processTransaction(
             Long sourceAccountId, Long targetAccountId, BigDecimal amount,
-            Currency currency, TypeTransaction type, String idempotencyKey)
+            Currency currency, TypeTransaction type, String idempotencyKey,
+            Long userId)
     {
         Optional<Transaction> existingTx = transactionRepository.findByIdempotencyKey(idempotencyKey);
         if (existingTx.isPresent()) {
@@ -121,7 +122,7 @@ public class TransactionService {
         }
         Transaction tx;
         try {
-            tx = createTransaction(sourceAccountId, targetAccountId, amount, currency, type, idempotencyKey);
+            tx = createTransaction(sourceAccountId, targetAccountId, amount, currency, type, idempotencyKey,userId);
             updateStatus(tx.getId(), Status.PROCESSING, null);
         } catch (DataIntegrityViolationException e) {
             log.warn("Idempotency Key Conflict: Another process saved the transaction first. Key: {}", idempotencyKey);
@@ -165,9 +166,10 @@ public class TransactionService {
 
     @Transactional
     public Transaction createTransaction(Long sourceId, Long targetId, BigDecimal amount,
-                                         Currency currency, TypeTransaction type, String idempotencyKey) {
+                                         Currency currency, TypeTransaction type, String idempotencyKey, Long userId) {
+
         Transaction tx = Transaction.builder()
-                .userId(sourceId)
+                .userId(userId)
                 .sourceAccountId(sourceId)
                 .targetAccountId(targetId)
                 .amount(amount)
@@ -178,6 +180,7 @@ public class TransactionService {
                 .typeTransaction(type)
                 .step(TransactionStep.NONE)
                 .build();
+        limitService.checkTransactionLimit(tx.getUserId(), amount);
         Transaction saved = transactionRepository.save(tx);
         log.info("TX {} created (Type: {})", saved.getId(), type);
         return saved;
