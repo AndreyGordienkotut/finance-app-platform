@@ -1,6 +1,7 @@
 package transaction_service.transaction_service.controller;
 
 import core.core.dto.AuthenticatedUser;
+import core.core.enums.Currency;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -15,9 +16,12 @@ import transaction_service.transaction_service.dto.TransactionResponseDto;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import transaction_service.transaction_service.dto.WithdrawRequestDto;
+import transaction_service.transaction_service.service.ExchangeRateService;
 import transaction_service.transaction_service.service.TransactionService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
+import java.math.BigDecimal;
 import java.security.Principal;
 
 @RestController
@@ -25,6 +29,7 @@ import java.security.Principal;
 @RequiredArgsConstructor
 public class TransactionController {
     private final TransactionService transactionService;
+    private final ExchangeRateService exchangeRateService;
     @PostMapping("/transfer")
     public ResponseEntity<TransactionResponseDto> transfer(@Valid @RequestBody TransactionRequestDto dto,
                                                            @AuthenticationPrincipal AuthenticatedUser user,
@@ -62,5 +67,13 @@ public class TransactionController {
 
         Page<TransactionResponseDto> history = transactionService.getHistory(accountId, pageable,user.userId());
         return ResponseEntity.ok(history);
+    }
+    @GetMapping("/exchange-preview")
+    public ResponseEntity<BigDecimal> previewExchange(
+            @RequestParam Currency from,
+            @RequestParam Currency to,
+            @RequestParam BigDecimal amount) {
+        BigDecimal rate = exchangeRateService.getRate(from, to);
+        return ResponseEntity.ok(exchangeRateService.convert(amount, rate));
     }
 }

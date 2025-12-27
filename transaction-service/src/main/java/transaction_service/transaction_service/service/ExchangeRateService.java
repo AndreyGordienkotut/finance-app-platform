@@ -20,9 +20,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ExchangeRateService {
     private final ExchangeRateClient exchangeRateClient;
 
-    private final Map<String, BigDecimal> ratesCache = new ConcurrentHashMap<>();
 
-    @Cacheable(value = "rates", key = "#from.name() + #to.name()")
+    @Cacheable(value = "exchangeRates", key = "#from.name() + '-' + #to.name()")
     public BigDecimal getRate(Currency from, Currency to) {
         if (from == to) return BigDecimal.ONE;
 

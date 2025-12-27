@@ -201,14 +201,14 @@ public class TransactionService {
         boolean debitSucceeded = tx.getStep() == TransactionStep.DEBIT_DONE;
         try {
             if (tx.getStep() == TransactionStep.NONE) {
-                log.info("TX {} SAGA step NONE: Starting Debit for account {}", tx.getId(), fromId);
+                log.info("TX {} SAGA: Debit {} from account {}", tx.getId(), amount, fromId);
                 executeDebit(tx.getId(), fromId, amount);
                 updateStep(tx.getId(), TransactionStep.DEBIT_DONE);
                 debitSucceeded = true;
             }
 
             if (tx.getStep() == TransactionStep.DEBIT_DONE) {
-                log.info("TX {} SAGA step DEBIT_DONE: Starting Credit for account {}", tx.getId(), toId);
+                log.info("TX {} SAGA: Credit {} to account {}", tx.getId(), tx.getTargetAmount(), toId);
                 executeCredit(tx.getId(), toId, tx.getTargetAmount());
                 updateStep(tx.getId(), TransactionStep.CREDIT_DONE);
             }
@@ -257,10 +257,6 @@ public class TransactionService {
         if (from.getStatus() == StatusAccount.CLOSED || to.getStatus() == StatusAccount.CLOSED) {
             throw new BadRequestException("Account is closed");
         }
-
-//        if (!from.getCurrency().equals(to.getCurrency())) {
-//            throw new BadRequestException("Different currencies");
-//        }
 
         if (from.getBalance().compareTo(dto.getAmount()) < 0) {
             throw new BadRequestException("Not enough money");

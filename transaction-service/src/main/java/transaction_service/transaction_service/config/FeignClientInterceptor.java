@@ -11,17 +11,14 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 public class FeignClientInterceptor implements RequestInterceptor {
     @Override
     public void apply(RequestTemplate template) {
-        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        if (attributes != null) {
-            String authHeader = attributes.getRequest().getHeader("Authorization");
-            if (authHeader != null) {
-                template.header("Authorization", authHeader);
-                log.info("Token attached to Feign request for URL: {}", template.url());
-            } else {
-                log.warn("No Authorization header found in current request!");
+        if (template.feignTarget().url().contains("account-service")) {
+            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                String authHeader = attributes.getRequest().getHeader("Authorization");
+                if (authHeader != null) {
+                    template.header("Authorization", authHeader);
+                }
             }
-        } else {
-            log.warn("No RequestContextAttributes found!");
         }
     }
 }
