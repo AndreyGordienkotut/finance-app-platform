@@ -11,8 +11,7 @@ import transaction_service.transaction_service.dto.ExchangeRateResponseDto;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+
 
 @Slf4j
 @Service
