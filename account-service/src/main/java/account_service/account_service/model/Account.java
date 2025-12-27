@@ -24,7 +24,7 @@ public class Account {
     private Long userId;
     @Enumerated(EnumType.STRING)
     private Currency currency;
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal balance;
     @Enumerated(EnumType.STRING)
     @Column(name = "status_account")

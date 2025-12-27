@@ -143,4 +143,20 @@ public class GlobalExceptionHandler {
         );
         return new ResponseEntity<>(apiError, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+    //503
+    @ExceptionHandler(ExternalServiceException.class)
+    public ResponseEntity<ApiError> handleExternalServiceException(
+            ExternalServiceException ex, HttpServletRequest request) {
+
+        ApiError apiError = new ApiError(
+                LocalDateTime.now(),
+                HttpStatus.SERVICE_UNAVAILABLE.value(),
+                "External Service Error",
+                ex.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+        log.error("External Service Error (503): {} Path: {}", ex.getMessage(), request.getRequestURI());
+        return new ResponseEntity<>(apiError, HttpStatus.SERVICE_UNAVAILABLE);
+    }
 }

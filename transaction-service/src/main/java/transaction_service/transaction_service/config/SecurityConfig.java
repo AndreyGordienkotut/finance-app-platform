@@ -21,6 +21,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/test/test-principal").authenticated()
                         .requestMatchers("/api/test/admin-stats").hasRole("ADMIN")
                         .requestMatchers("/api/transaction/**").authenticated()
+                        .requestMatchers("/api/account/**").authenticated()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().denyAll());
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

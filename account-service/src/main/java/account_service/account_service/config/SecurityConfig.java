@@ -19,7 +19,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/account/*/debit", "/api/account/*/credit").hasRole("SYSTEM")
+                        .requestMatchers("/api/account/*/debit", "/api/account/*/credit").authenticated()
                         .requestMatchers("/api/account/**").authenticated()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().denyAll());

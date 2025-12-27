@@ -22,11 +22,13 @@ public class Transaction {
     private Long sourceAccountId;
     @Column(name="target_account_id")
     private Long targetAccountId;
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
     @Enumerated(EnumType.STRING)
+    @Column( nullable = false)
     private Currency currency;
     @Enumerated(EnumType.STRING)
+    @Column( nullable = false)
     private Status status;
     @Column(nullable = false, name = "create_at")
     private LocalDateTime createdAt;
@@ -37,11 +39,17 @@ public class Transaction {
     @Column(name = "idempotency_key", unique = true, nullable = false)
     private String idempotencyKey;
     @Enumerated(EnumType.STRING)
+    @Column( nullable = false)
     private TypeTransaction typeTransaction;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "transaction_step", nullable = false)
     private TransactionStep step = TransactionStep.NONE;
+
+    @Column(name = "exchange_rate", nullable = false)
+    private BigDecimal exchangeRate;
+    @Column(name = "target_amount", nullable = false, precision = 19, scale = 4)
+    private BigDecimal targetAmount;
 
 
 

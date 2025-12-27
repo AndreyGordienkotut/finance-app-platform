@@ -20,6 +20,8 @@ public class TransactionResponseDto {
     private Long sourceAccountId;
     private Long targetAccountId;
     private BigDecimal amount;
+    private BigDecimal targetAmount;
+    private BigDecimal exchangeRate;
     private Currency currency;
     private Status status;
     private LocalDateTime createdAt;

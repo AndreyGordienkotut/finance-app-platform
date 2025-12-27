@@ -32,6 +32,7 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final LimitService limitService;
     private final AccountClient accountClient;
+    private final ExchangeRateService exchangeRateService;
 
 
     public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
@@ -167,12 +168,22 @@ public class TransactionService {
     @Transactional
     public Transaction createTransaction(Long sourceId, Long targetId, BigDecimal amount,
                                          Currency currency, TypeTransaction type, String idempotencyKey, Long userId) {
-
+        BigDecimal rate = BigDecimal.ONE;
+        BigDecimal targetAmount = amount;
+        if (type == TypeTransaction.TRANSFER && targetId != null) {
+            AccountResponseDto targetAcc = accountClient.getAccountById(targetId);
+            if (!currency.equals(targetAcc.getCurrency())) {
+                rate = exchangeRateService.getRate(currency, targetAcc.getCurrency());
+                targetAmount = exchangeRateService.convert(amount, rate);
+            }
+        }
         Transaction tx = Transaction.builder()
                 .userId(userId)
                 .sourceAccountId(sourceId)
                 .targetAccountId(targetId)
                 .amount(amount)
+                .targetAmount(targetAmount)
+                .exchangeRate(rate)
                 .status(Status.CREATED)
                 .currency(currency)
                 .createdAt(LocalDateTime.now())
@@ -180,6 +191,7 @@ public class TransactionService {
                 .typeTransaction(type)
                 .step(TransactionStep.NONE)
                 .build();
+
         limitService.checkTransactionLimit(tx.getUserId(), amount);
         Transaction saved = transactionRepository.save(tx);
         log.info("TX {} created (Type: {})", saved.getId(), type);
@@ -197,7 +209,7 @@ public class TransactionService {
 
             if (tx.getStep() == TransactionStep.DEBIT_DONE) {
                 log.info("TX {} SAGA step DEBIT_DONE: Starting Credit for account {}", tx.getId(), toId);
-                executeCredit(tx.getId(), toId, amount);
+                executeCredit(tx.getId(), toId, tx.getTargetAmount());
                 updateStep(tx.getId(), TransactionStep.CREDIT_DONE);
             }
         } catch (FeignException e) {
@@ -246,9 +258,9 @@ public class TransactionService {
             throw new BadRequestException("Account is closed");
         }
 
-        if (!from.getCurrency().equals(to.getCurrency())) {
-            throw new BadRequestException("Different currencies");
-        }
+//        if (!from.getCurrency().equals(to.getCurrency())) {
+//            throw new BadRequestException("Different currencies");
+//        }
 
         if (from.getBalance().compareTo(dto.getAmount()) < 0) {
             throw new BadRequestException("Not enough money");
@@ -301,6 +313,8 @@ public class TransactionService {
                 transaction.getSourceAccountId(),
                 transaction.getTargetAccountId(),
                 transaction.getAmount(),
+                transaction.getTargetAmount(),
+                transaction.getExchangeRate(),
                 transaction.getCurrency(),
                 transaction.getStatus(),
                 transaction.getCreatedAt(),

@@ -23,7 +23,7 @@ public class AppliedTransactions {
     @ManyToOne
     @JoinColumn(name = "account_id", referencedColumnName = "id", nullable = false)
     private Account account;
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

@@ -50,13 +50,18 @@ public class AccountController {
     }
 
     @PostMapping("/{id}/debit")
-    public ResponseEntity<Void> debit(@PathVariable Long id, @RequestParam BigDecimal amount, @RequestParam Long transactionId) {
+    public ResponseEntity<Void> debit(@PathVariable Long id,
+                                      @RequestParam("amount") BigDecimal amount,
+                                      @RequestParam("txId") Long transactionId
+                                       ) {
         accountService.debit(id, amount,transactionId);
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/{id}/credit")
-    public ResponseEntity<Void> credit(@PathVariable Long id, @RequestParam BigDecimal amount ,@RequestParam Long transactionId) {
+    public ResponseEntity<Void> credit(@PathVariable Long id,
+                                       @RequestParam("amount") BigDecimal amount,
+                                       @RequestParam("txId") Long transactionId  ) {
         accountService.credit(id, amount,transactionId);
         return ResponseEntity.ok().build();
     }
