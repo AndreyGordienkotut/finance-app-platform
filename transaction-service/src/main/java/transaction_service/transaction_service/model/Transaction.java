@@ -51,6 +51,10 @@ public class Transaction {
     @Column(name = "target_amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal targetAmount;
 
+    @ManyToOne
+    @JoinColumn(name = "transaction_category_id")
+    private TransactionCategory category;
+
 
 
 }

@@ -76,6 +76,22 @@ public class GlobalExceptionHandler {
         log.warn("API Error (401): {} Path: {}", ex.getMessage(), request.getRequestURI());
         return new ResponseEntity<>(apiError, HttpStatus.UNAUTHORIZED);
     }
+    //403 forbidden
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiError> handleForbiddenException(
+            ForbiddenException ex, HttpServletRequest request) {
+
+        ApiError apiError = new ApiError(
+                LocalDateTime.now(),
+                HttpStatus.FORBIDDEN.value(),
+                HttpStatus.FORBIDDEN.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+        log.warn("API Error (403): {} Path: {}", ex.getMessage(), request.getRequestURI());
+        return new ResponseEntity<>(apiError, HttpStatus.FORBIDDEN);
+    }
 
     //404 Not Found
     @ExceptionHandler(NotFoundException.class)

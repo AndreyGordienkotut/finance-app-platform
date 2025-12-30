@@ -5,6 +5,7 @@ import core.core.enums.Currency;
 import core.core.enums.StatusAccount;
 import core.core.exception.*;
 import feign.FeignException;
+import jakarta.ws.rs.ForbiddenException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -16,6 +17,7 @@ import transaction_service.transaction_service.config.AccountClient;
 import transaction_service.transaction_service.dto.TransactionRequestDto;
 import transaction_service.transaction_service.dto.TransactionResponseDto;
 import transaction_service.transaction_service.model.*;
+import transaction_service.transaction_service.repository.TransactionCategoryRepository;
 import transaction_service.transaction_service.repository.TransactionRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,9 +32,12 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class TransactionService {
     private final TransactionRepository transactionRepository;
+    private final TransactionCategoryRepository transactionCategoryRepository;
     private final LimitService limitService;
     private final AccountClient accountClient;
     private final ExchangeRateService exchangeRateService;
+    private final CategoryService categoryService;
+
 
 
     public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
@@ -51,7 +56,7 @@ public class TransactionService {
             from.getCurrency(),
             TypeTransaction.TRANSFER,
             idempotencyKey,
-                userId
+                userId,dto.getCategoryId()
         );
     }
 
@@ -74,7 +79,7 @@ public class TransactionService {
                 targetAccount.getCurrency(),
                 TypeTransaction.DEPOSIT,
                 idempotencyKey,
-                userId
+                userId,null
         );
     }
     public TransactionResponseDto withdraw(WithdrawRequestDto dto, Long userId, String idempotencyKey) {
@@ -93,7 +98,8 @@ public class TransactionService {
                 sourceAccount.getCurrency(),
                 TypeTransaction.WITHDRAW,
                 idempotencyKey,
-                userId
+                userId,dto.getCategoryId()
+
         );
     }
     public Page<TransactionResponseDto> getHistory(Long accountId, Pageable pageable,Long userId) {
@@ -110,8 +116,9 @@ public class TransactionService {
     private TransactionResponseDto processTransaction(
             Long sourceAccountId, Long targetAccountId, BigDecimal amount,
             Currency currency, TypeTransaction type, String idempotencyKey,
-            Long userId)
+            Long userId,Long categoryId)
     {
+        TransactionCategory category = categoryService.validateAndGetCategory(categoryId, userId, type);
         Optional<Transaction> existingTx = transactionRepository.findByIdempotencyKey(idempotencyKey);
         if (existingTx.isPresent()) {
             Transaction tx = existingTx.get();
@@ -123,7 +130,7 @@ public class TransactionService {
         }
         Transaction tx;
         try {
-            tx = createTransaction(sourceAccountId, targetAccountId, amount, currency, type, idempotencyKey,userId);
+            tx = createTransaction(sourceAccountId, targetAccountId, amount, currency, type, idempotencyKey,userId,category);
             updateStatus(tx.getId(), Status.PROCESSING, null);
         } catch (DataIntegrityViolationException e) {
             log.warn("Idempotency Key Conflict: Another process saved the transaction first. Key: {}", idempotencyKey);
@@ -167,7 +174,9 @@ public class TransactionService {
 
     @Transactional
     public Transaction createTransaction(Long sourceId, Long targetId, BigDecimal amount,
-                                         Currency currency, TypeTransaction type, String idempotencyKey, Long userId) {
+                                         Currency currency, TypeTransaction type, String idempotencyKey, Long userId, TransactionCategory category) {
+
+
         BigDecimal rate = BigDecimal.ONE;
         BigDecimal targetAmount = amount;
         if (type == TypeTransaction.TRANSFER && targetId != null) {
@@ -190,9 +199,11 @@ public class TransactionService {
                 .idempotencyKey(idempotencyKey)
                 .typeTransaction(type)
                 .step(TransactionStep.NONE)
+                .category(category)
                 .build();
 
-        limitService.checkTransactionLimit(tx.getUserId(), amount);
+        BigDecimal limitAmount = type == TypeTransaction.TRANSFER ? targetAmount : amount;
+        limitService.checkTransactionLimit(userId, limitAmount);
         Transaction saved = transactionRepository.save(tx);
         log.info("TX {} created (Type: {})", saved.getId(), type);
         return saved;
@@ -316,7 +327,8 @@ public class TransactionService {
                 transaction.getCreatedAt(),
                 transaction.getErrorMessage(),
                 transaction.getUpdatedAt(),
-                transaction.getTypeTransaction()
+                transaction.getTypeTransaction(),
+                transaction.getCategory()
         );
     }
 

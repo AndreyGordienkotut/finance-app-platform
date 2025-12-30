@@ -19,7 +19,6 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     Optional<Transaction> findByIdempotencyKey(String idempotencyKey);
     Page<Transaction> findBySourceAccountIdOrTargetAccountId(
             Long sourceAccountId, Long targetAccountId, Pageable pageable);
-//    List<Transaction> findByStatusAndCreatedAtBefore(Status status, LocalDateTime dateTime);
 
     List<Transaction> findByStatusAndUpdatedAtBefore(Status status, LocalDateTime dateTime);
     @Query("SELECT SUM(t.amount) FROM Transaction t " +
@@ -31,4 +30,13 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
             @Param("userId") Long userId,
             @Param("since") LocalDateTime since
     );
+
+
+    @Query("SELECT c.id, c.name, SUM(t.targetAmount) " +
+            "FROM Transaction t JOIN t.category c " +
+            "WHERE t.userId = :userId AND t.status = :status " +
+            "AND (:from IS NULL OR t.createdAt >= :from) " +
+            "AND (:to IS NULL OR t.createdAt <= :to) " +
+            "GROUP BY c.id, c.name")
+    List<Object[]> getStatsByCategory(@Param("userId") Long userId, @Param("status") Status status, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 }

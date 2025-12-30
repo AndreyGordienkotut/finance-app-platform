@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import transaction_service.transaction_service.model.TransactionCategory;
 
 import java.math.BigDecimal;
 @Data
@@ -20,4 +21,5 @@ public class WithdrawRequestDto {
     @DecimalMin(value = "0.01", inclusive = true)
     @DecimalMax(value = "10000.00")
     private BigDecimal amount;
+    private Long categoryId;
 }
