@@ -5,7 +5,6 @@ import core.core.enums.Currency;
 import core.core.enums.StatusAccount;
 import core.core.exception.*;
 import feign.FeignException;
-import jakarta.ws.rs.ForbiddenException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -32,7 +31,6 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class TransactionService {
     private final TransactionRepository transactionRepository;
-    private final TransactionCategoryRepository transactionCategoryRepository;
     private final LimitService limitService;
     private final AccountClient accountClient;
     private final ExchangeRateService exchangeRateService;
