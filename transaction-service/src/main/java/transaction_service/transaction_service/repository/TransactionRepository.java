@@ -24,7 +24,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     @Query("SELECT SUM(t.amount) FROM Transaction t " +
             "WHERE t.userId = :userId " +
             "AND t.createdAt > :since " +
-            "AND t.status = 'SUCCESS' " +
+            "AND t.status = 'COMPLETED' " +
             "AND t.typeTransaction IN ('TRANSFER', 'WITHDRAW')")
     BigDecimal calculateTotalSpentForUserInLast24Hours(
             @Param("userId") Long userId,
@@ -32,11 +32,69 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     );
 
 
-    @Query("SELECT c.id, c.name, SUM(t.targetAmount) " +
-            "FROM Transaction t JOIN t.category c " +
-            "WHERE t.userId = :userId AND t.status = :status " +
-            "AND (:from IS NULL OR t.createdAt >= :from) " +
-            "AND (:to IS NULL OR t.createdAt <= :to) " +
-            "GROUP BY c.id, c.name")
-    List<Object[]> getStatsByCategory(@Param("userId") Long userId, @Param("status") Status status, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+    @Query("""
+        SELECT c.id, c.name, SUM(COALESCE(t.targetAmount, t.amount)) 
+        FROM Transaction t 
+        LEFT JOIN t.category c 
+        WHERE t.userId = :userId 
+        AND t.status = :status 
+        AND t.typeTransaction IN ('TRANSFER', 'WITHDRAW')
+        AND t.category IS NOT NULL
+        AND (:from IS NULL OR t.createdAt >= :from) 
+        AND (:to IS NULL OR t.createdAt <= :to) 
+        GROUP BY c.id, c.name
+    """)
+    List<Object[]> getStatsByCategory(@Param("userId") Long userId,
+                                      @Param("status") Status status,
+                                      @Param("from") LocalDateTime from,
+                                      @Param("to") LocalDateTime to);
+
+    @Query("""
+        SELECT SUM(COALESCE(t.targetAmount, t.amount)) 
+        FROM Transaction t
+        WHERE t.userId = :userId 
+        AND t.status = :status
+        AND t.typeTransaction IN ('TRANSFER', 'WITHDRAW')
+        AND t.createdAt BETWEEN :from AND :to
+    """)
+    BigDecimal getTotalSpent(@Param("userId") Long userId,
+                             @Param("status") Status status,
+                             @Param("from") LocalDateTime from,
+                             @Param("to") LocalDateTime to);
+
+    @Query("""
+        SELECT c.id, c.name, SUM(COALESCE(t.targetAmount, t.amount)) as total 
+        FROM Transaction t JOIN t.category c 
+        WHERE t.userId = :userId 
+        AND t.status = :status
+        AND t.typeTransaction IN ('TRANSFER', 'WITHDRAW')
+        AND t.createdAt BETWEEN :from AND :to 
+        GROUP BY c.id, c.name 
+        ORDER BY total DESC
+    """)
+    List<Object[]> getTopCategories(@Param("userId") Long userId,
+                                    @Param("status") Status status,
+                                    @Param("from") LocalDateTime from,
+                                    @Param("to") LocalDateTime to,
+                                    Pageable pageable);
+    @Query(value = """
+        SELECT 
+            CASE 
+                WHEN :groupBy = 'day' THEN DATE(t.created_at)
+                WHEN :groupBy = 'week' THEN STR_TO_DATE(CONCAT(YEARWEEK(t.created_at, 1), ' Monday'), '%X%V %W')
+                WHEN :groupBy = 'month' THEN DATE_FORMAT(t.created_at, '%Y-%m-01')
+            END as period, 
+            SUM(COALESCE(t.target_amount, t.amount)) as total
+        FROM transactions t
+        WHERE t.user_id = :userId 
+          AND t.status = 'COMPLETED'
+          AND t.type_transaction IN ('TRANSFER', 'WITHDRAW')
+          AND t.created_at BETWEEN :from AND :to
+        GROUP BY period
+        ORDER BY period
+    """, nativeQuery = true)
+    List<Object[]> getTimelineData(@Param("userId") Long userId,
+                                   @Param("from") LocalDateTime from,
+                                   @Param("to") LocalDateTime to,
+                                   @Param("groupBy") String groupBy);
 }

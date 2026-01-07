@@ -7,6 +7,7 @@ import core.core.exception.*;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,7 +17,6 @@ import transaction_service.transaction_service.config.AccountClient;
 import transaction_service.transaction_service.dto.TransactionRequestDto;
 import transaction_service.transaction_service.dto.TransactionResponseDto;
 import transaction_service.transaction_service.model.*;
-import transaction_service.transaction_service.repository.TransactionCategoryRepository;
 import transaction_service.transaction_service.repository.TransactionRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -167,10 +167,8 @@ public class TransactionService {
             executeDebit(tx.getId(), sourceAccountId, amount);
         }
     }
-
-
-
     @Transactional
+    @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
     public Transaction createTransaction(Long sourceId, Long targetId, BigDecimal amount,
                                          Currency currency, TypeTransaction type, String idempotencyKey, Long userId, TransactionCategory category) {
 
@@ -288,6 +286,7 @@ public class TransactionService {
         return account;
     }
     @Transactional
+    @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
     public void updateStatus(Long id, Status status, String error) {
         Transaction tx = transactionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Transaction not found"));
