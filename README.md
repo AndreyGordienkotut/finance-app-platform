@@ -48,6 +48,7 @@ Transaction Service
 - Cache eviction аналітичних даних після мутацій
 
 Analytics Service
+
 Аналітичний сервіс для побудови фінансової статистики що є частиною Transaction Service
 - Загальна сума витрат за період
 - Топ категорій витрат
@@ -58,6 +59,7 @@ Analytics Service
 - TTL для аналітичних даних
 
 Exchange Rate Service
+
 Отримання актуальних валютних курсів з зовнішнього API що э частиною Transaction Service
 - Обробка помилок зовнішнього сервісу
 - Кешування валютних курсів у Redis
