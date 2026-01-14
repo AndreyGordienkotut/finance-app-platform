@@ -80,16 +80,16 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     @Query(value = """
         SELECT 
             CASE 
-                WHEN :groupBy = 'day' THEN DATE(t.created_at)
-                WHEN :groupBy = 'week' THEN STR_TO_DATE(CONCAT(YEARWEEK(t.created_at, 1), ' Monday'), '%X%V %W')
-                WHEN :groupBy = 'month' THEN DATE_FORMAT(t.created_at, '%Y-%m-01')
+                WHEN :groupBy = 'day' THEN DATE(t.create_at)
+                WHEN :groupBy = 'week' THEN STR_TO_DATE(CONCAT(YEARWEEK(t.create_at, 1), ' Monday'), '%X%V %W')
+                WHEN :groupBy = 'month' THEN DATE_FORMAT(t.create_at, '%Y-%m-01')
             END as period, 
             SUM(COALESCE(t.target_amount, t.amount)) as total
-        FROM transactions t
+        FROM transaction t
         WHERE t.user_id = :userId 
           AND t.status = 'COMPLETED'
           AND t.type_transaction IN ('TRANSFER', 'WITHDRAW')
-          AND t.created_at BETWEEN :from AND :to
+          AND t.create_at BETWEEN :from AND :to
         GROUP BY period
         ORDER BY period
     """, nativeQuery = true)

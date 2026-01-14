@@ -20,7 +20,8 @@ public class ExchangeRateService {
     private final ExchangeRateClient exchangeRateClient;
 
 
-    @Cacheable(value = "exchangeRates", key = "#from.name() + '-' + #to.name()")
+    @Cacheable(value = "exchangeRates", key = "#from.name() + '-' + #to.name()", cacheManager = "cacheManager")
+
     public BigDecimal getRate(Currency from, Currency to) {
         if (from == to) return BigDecimal.ONE;
 

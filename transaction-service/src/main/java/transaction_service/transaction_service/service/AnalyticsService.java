@@ -24,7 +24,7 @@ import java.util.List;
 public class AnalyticsService {
     private final TransactionRepository transactionRepository;
 
-    @Cacheable(value = "totalSpent", key = "'total:' + #userId + ':' + T(java.util.Objects).toString(#from) + ':' + T(java.util.Objects).toString(#to)")
+    @Cacheable(value = "totalSpent", key = "'total:' + #userId + ':' + #from + ':' + #to", cacheManager = "cacheManager")
     public TotalSpentResponse getTotalSpent(Long userId, LocalDateTime from, LocalDateTime to) {
         log.info("Calculating total spent for user {} (cache miss)", userId);
         LocalDateTime[] dates = validateAndNormalizeDates(from, to);
@@ -32,7 +32,7 @@ public class AnalyticsService {
 
         return new TotalSpentResponse(total != null ? total : BigDecimal.ZERO, "MIXED_CURRENCY");
     }
-    @Cacheable(value = "topCategories", key = "'top:' + #userId + ':' + #from + ':' + #to + ':' + #limit")
+    @Cacheable(value = "topCategories", key = "'top:' + #userId + ':' + #from + ':' + #to + ':' + #limit", cacheManager = "cacheManager")
     public List<TopCategoryResponse> getTopCategories(Long userId, LocalDateTime from, LocalDateTime to, int limit) {
         log.info("Calculating top categories for user {} (cache miss)", userId);
         LocalDateTime[] dates = validateAndNormalizeDates(from, to);
@@ -43,7 +43,7 @@ public class AnalyticsService {
                 .map(r -> new TopCategoryResponse((Long) r[0], (String) r[1], (BigDecimal) r[2]))
                 .toList();
     }
-    @Cacheable(value = "timeline", key = "'timeline:' + #userId + ':' + #from + ':' + #to + ':' + #groupBy")
+    @Cacheable(value = "timeline", key = "'timeline:' + #userId + ':' + #from + ':' + #to + ':' + #groupBy", cacheManager = "cacheManager")
     public List<TimelineResponse> getTimeline(Long userId, LocalDateTime from, LocalDateTime to, String groupBy) {
         log.info("Calculating timeline ({}) for user {} (cache miss)", groupBy, userId);
         LocalDateTime[] dates = validateAndNormalizeDates(from, to);

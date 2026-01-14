@@ -51,11 +51,12 @@ subprojects {
         testImplementation 'org.springframework.kafka:spring-kafka-test'
         //feign client
         implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
-        //EurekaClient
-        // Eureka Client and Load Balancer
+        // eureka Client and Load Balancer
         implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
         implementation 'org.springframework.cloud:spring-cloud-starter-loadbalancer'
-
+        //redis
+        implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+        implementation 'org.springframework.boot:spring-boot-starter-cache'
     }
 
     dependencyManagement {

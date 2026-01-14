@@ -36,8 +36,8 @@ public class TransactionService {
     private final ExchangeRateService exchangeRateService;
     private final CategoryService categoryService;
 
-
-
+    @Transactional
+    @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
     public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
            throw new BadRequestException("Idempotency-Key header is required.");
@@ -57,7 +57,8 @@ public class TransactionService {
                 userId,dto.getCategoryId()
         );
     }
-
+    @Transactional
+    @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
     public TransactionResponseDto deposit(DepositRequestDto dto, String idempotencyKey, Long userId) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new BadRequestException("Idempotency-Key header is required.");
@@ -80,6 +81,8 @@ public class TransactionService {
                 userId,null
         );
     }
+    @Transactional
+    @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
     public TransactionResponseDto withdraw(WithdrawRequestDto dto, Long userId, String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new BadRequestException("Idempotency-Key header is required.");
@@ -167,8 +170,8 @@ public class TransactionService {
             executeDebit(tx.getId(), sourceAccountId, amount);
         }
     }
+
     @Transactional
-    @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
     public Transaction createTransaction(Long sourceId, Long targetId, BigDecimal amount,
                                          Currency currency, TypeTransaction type, String idempotencyKey, Long userId, TransactionCategory category) {
 
@@ -285,8 +288,8 @@ public class TransactionService {
         }
         return account;
     }
-    @Transactional
     @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
+    @Transactional
     public void updateStatus(Long id, Status status, String error) {
         Transaction tx = transactionRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Transaction not found"));

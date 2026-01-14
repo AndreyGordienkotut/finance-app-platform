@@ -18,9 +18,15 @@ public class SecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                "/api/auth/**",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**"
+                        ).permitAll()
                         .requestMatchers("/api/test/test-principal").authenticated()
                         .requestMatchers("/api/test/admin-stats").hasRole("ADMIN")
                         .requestMatchers("/api/transaction/**").authenticated()
+                        .requestMatchers("/api/transactions/stats/**").authenticated()
                         .requestMatchers("/api/categories/**").authenticated()
                         .requestMatchers("/api/account/**").authenticated()
                         .requestMatchers("/actuator/health").permitAll()

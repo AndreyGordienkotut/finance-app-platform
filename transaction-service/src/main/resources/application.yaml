@@ -11,7 +11,12 @@ spring:
     database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
       ddl-auto: none
-
+  data:
+    redis:
+      port: 6379
+      host: localhost
+  cache:
+    type: redis
 eureka:
   client:
     service-url:
