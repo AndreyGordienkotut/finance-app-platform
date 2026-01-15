@@ -40,12 +40,5 @@ public class AnalyticsController {
         return ResponseEntity.ok(analyticsService.getTopCategories(user.userId(), from, to, limit));
     }
 
-    @GetMapping("/timeline")
-    public ResponseEntity<List<TimelineResponse>> getTimeline(
-            @AuthenticationPrincipal AuthenticatedUser user,
-            @RequestParam(defaultValue = "day") String groupBy,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
-        return ResponseEntity.ok(analyticsService.getTimeline(user.userId(), from, to, groupBy));
-    }
+
 }

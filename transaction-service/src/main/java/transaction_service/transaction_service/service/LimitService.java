@@ -50,13 +50,12 @@ public class LimitService {
     @Transactional
     public LimitResponseDto updateLimits(Long userId, BigDecimal daily, BigDecimal single) {
         TransactionLimit limit = transactionLimitRepository.findByUserId(userId)
-                .orElse(createDefaultLimit(userId));
+                .orElseThrow(() -> new NotFoundException("Limits not found"));
 
         limit.setDailyLimit(daily);
         limit.setSingleLimit(single);
 
-        TransactionLimit savedLimit = transactionLimitRepository.save(limit);
-        return convertToDto(savedLimit);
+        return convertToDto(limit);
     }
     private TransactionLimit createDefaultLimit(Long userId) {
         TransactionLimit newLimit = new TransactionLimit();

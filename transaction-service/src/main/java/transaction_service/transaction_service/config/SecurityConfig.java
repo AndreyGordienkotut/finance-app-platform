@@ -29,6 +29,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/transactions/stats/**").authenticated()
                         .requestMatchers("/api/categories/**").authenticated()
                         .requestMatchers("/api/account/**").authenticated()
+                        .requestMatchers("/api/limits/**").authenticated()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().denyAll());
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

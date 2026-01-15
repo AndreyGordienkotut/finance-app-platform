@@ -43,22 +43,7 @@ public class AnalyticsService {
                 .map(r -> new TopCategoryResponse((Long) r[0], (String) r[1], (BigDecimal) r[2]))
                 .toList();
     }
-    @Cacheable(value = "timeline", key = "'timeline:' + #userId + ':' + #from + ':' + #to + ':' + #groupBy", cacheManager = "cacheManager")
-    public List<TimelineResponse> getTimeline(Long userId, LocalDateTime from, LocalDateTime to, String groupBy) {
-        log.info("Calculating timeline ({}) for user {} (cache miss)", groupBy, userId);
-        LocalDateTime[] dates = validateAndNormalizeDates(from, to);
 
-        List<Object[]> results = transactionRepository.getTimelineData(
-                userId, dates[0], dates[1], groupBy.toLowerCase()
-        );
-
-        return results.stream()
-                .map(r -> new TimelineResponse(
-                        ((java.sql.Date) r[0]).toLocalDate(),
-                        (BigDecimal) r[1]
-                ))
-                .toList();
-    }
 
     private LocalDateTime[] validateAndNormalizeDates(LocalDateTime from, LocalDateTime to) {
         if (from == null) from = LocalDateTime.now().minusDays(30);
