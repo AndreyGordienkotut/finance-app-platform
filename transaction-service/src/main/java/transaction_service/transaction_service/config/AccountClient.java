@@ -12,15 +12,15 @@ import java.math.BigDecimal;
 @FeignClient(name = "account-service")
 public interface AccountClient {
 
-    @GetMapping("/api/account/{id}")
+    @GetMapping("/api/v1/accounts/{id}")
     AccountResponseDto getAccountById(@PathVariable("id") Long id);
 
-    @PostMapping("/api/account/{id}/debit")
+    @PostMapping("/api/v1/accounts/{id}/debit")
     void debit(@PathVariable("id") Long id,
                @RequestParam("amount") BigDecimal amount,
                @RequestParam("txId") Long transactionId);
 
-    @PostMapping("/api/account/{id}/credit")
+    @PostMapping("/api/v1/accounts/{id}/credit")
     void credit(@PathVariable("id") Long id,
                 @RequestParam("amount") BigDecimal amount,
                 @RequestParam("txId") Long transactionId);

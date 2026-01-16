@@ -20,12 +20,12 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/auth/**",
+                                "/api/v1/auth/**",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
                         ).permitAll()
-                        .requestMatchers("/api/account/*/debit", "/api/account/*/credit").authenticated()
-                        .requestMatchers("/api/account/**").authenticated()
+                        .requestMatchers("/api/v1/accounts/*/debit", "/api/v1/accounts/*/credit").authenticated()
+                        .requestMatchers("/api/v1/accounts/**").authenticated()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().denyAll());
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

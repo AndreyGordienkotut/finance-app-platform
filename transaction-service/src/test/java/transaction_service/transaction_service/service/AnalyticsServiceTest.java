@@ -9,7 +9,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
-import transaction_service.transaction_service.dto.TimelineResponse;
+import transaction_service.transaction_service.dto.CategoryStatDto;
 import transaction_service.transaction_service.dto.TopCategoryResponse;
 import transaction_service.transaction_service.dto.TotalSpentResponse;
 import transaction_service.transaction_service.repository.TransactionRepository;
@@ -18,12 +18,12 @@ import core.core.exception.*;
 import transaction_service.transaction_service.model.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -132,33 +132,25 @@ public class AnalyticsServiceTest {
         assertEquals(limit, pageableCaptor.getValue().getPageSize());
     }
 
-    //Tests for getTimeline
-
+    //getCategoryStats
     @Test
-    @DisplayName("Should correctly convert SQL Date to LocalDate in timeline")
-    void getTimeline_ConvertsDatesCorrectly() {
-        java.sql.Date sqlDate = java.sql.Date.valueOf("2025-01-01");
+    @DisplayName("Should map repository objects to CategoryStatDto")
+    void getCategoryStats_MapsCorrectly() {
+        LocalDateTime from = LocalDateTime.now().minusDays(1);
+        LocalDateTime to = LocalDateTime.now();
 
-        List<Object[]> mockData = Collections.singletonList(new Object[]{sqlDate, new BigDecimal("42.00")});
+        List<Object[]> mockResults = Collections.singletonList(
+                new Object[]{100L, "FOOD", new BigDecimal("150.00")}
+        );
 
-        when(transactionRepository.getTimelineData(eq(userId), any(), any(), eq("day")))
-                .thenReturn(mockData);
+        when(transactionRepository.getStatsByCategory(userId, Status.COMPLETED, from, to))
+                .thenReturn(mockResults);
 
-        List<TimelineResponse> result = analyticsService.getTimeline(userId, from, to, "day");
+        List<CategoryStatDto> stats = analyticsService.getCategoryStats(userId, from, to);
 
-        assertEquals(1, result.size());
-        assertEquals(LocalDate.of(2025, 1, 1), result.get(0).getPeriod());
-        assertEquals(new BigDecimal("42.00"), result.get(0).getTotal());
+        assertEquals(1, stats.size());
+        assertEquals("FOOD", stats.get(0).getName());
+        assertEquals(new BigDecimal("150.00"), stats.get(0).getTotalAmount());
     }
 
-    @Test
-    @DisplayName("Should handle empty timeline data")
-    void getTimeline_HandlesEmptyData() {
-        when(transactionRepository.getTimelineData(any(), any(), any(), any()))
-                .thenReturn(Collections.emptyList());
-
-        List<TimelineResponse> result = analyticsService.getTimeline(userId, from, to, "month");
-
-        assertTrue(result.isEmpty());
-    }
 }

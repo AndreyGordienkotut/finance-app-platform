@@ -57,6 +57,7 @@ public class LimitService {
 
         return convertToDto(limit);
     }
+
     private TransactionLimit createDefaultLimit(Long userId) {
         TransactionLimit newLimit = new TransactionLimit();
         newLimit.setUserId(userId);

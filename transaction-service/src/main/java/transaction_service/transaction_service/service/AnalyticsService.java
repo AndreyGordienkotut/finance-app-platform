@@ -7,7 +7,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import transaction_service.transaction_service.dto.TimelineResponse;
+import transaction_service.transaction_service.dto.CategoryStatDto;
 import transaction_service.transaction_service.dto.TopCategoryResponse;
 import transaction_service.transaction_service.dto.TotalSpentResponse;
 import transaction_service.transaction_service.model.Status;
@@ -43,7 +43,17 @@ public class AnalyticsService {
                 .map(r -> new TopCategoryResponse((Long) r[0], (String) r[1], (BigDecimal) r[2]))
                 .toList();
     }
+    public List<CategoryStatDto> getCategoryStats(Long userId, LocalDateTime from, LocalDateTime to) {
+        List<Object[]> results = transactionRepository.getStatsByCategory(userId, Status.COMPLETED, from, to);
 
+        return results.stream()
+                .map(r -> new CategoryStatDto(
+                        (Long) r[0],
+                        (String) r[1],
+                        (BigDecimal) r[2]
+                ))
+                .toList();
+    }
 
     private LocalDateTime[] validateAndNormalizeDates(LocalDateTime from, LocalDateTime to) {
         if (from == null) from = LocalDateTime.now().minusDays(30);

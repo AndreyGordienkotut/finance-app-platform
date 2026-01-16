@@ -24,26 +24,26 @@ import org.springframework.data.domain.Pageable;
 import java.math.BigDecimal;
 
 @RestController
-@RequestMapping("/api/transaction")
+@RequestMapping("/api/v1/transactions")
 @RequiredArgsConstructor
 public class TransactionController {
     private final TransactionService transactionService;
     private final ExchangeRateService exchangeRateService;
-    @PostMapping("/transfer")
+    @PostMapping("/transfers")
     public ResponseEntity<TransactionResponseDto> transfer(@Valid @RequestBody TransactionRequestDto dto,
                                                            @AuthenticationPrincipal AuthenticatedUser user,
                                                            @RequestHeader("Idempotency-Key") String idempotencyKey) {
         TransactionResponseDto response = transactionService.transfer(dto, user.userId(),idempotencyKey);
         return ResponseEntity.ok(response);
     }
-    @PostMapping("/deposit")
+    @PostMapping("/deposits")
     public ResponseEntity<TransactionResponseDto> deposit (@Valid @RequestBody DepositRequestDto dto
     ,@RequestHeader("Idempotency-Key") String idempotencyKey,@AuthenticationPrincipal AuthenticatedUser user) {
 
         TransactionResponseDto responseDto = transactionService.deposit(dto,idempotencyKey,user.userId());
         return ResponseEntity.ok(responseDto);
     }
-    @PostMapping("/withdraw")
+    @PostMapping("/withdrawals")
     public ResponseEntity<TransactionResponseDto> withdraw(
             @Valid @RequestBody WithdrawRequestDto dto,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
@@ -53,7 +53,7 @@ public class TransactionController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/history")
+    @GetMapping
     public ResponseEntity<Page<TransactionResponseDto>> getHistory(
             @RequestParam("accountId") Long accountId,
             @RequestParam(value = "page", defaultValue = "0") int page,

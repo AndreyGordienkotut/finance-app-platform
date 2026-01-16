@@ -52,7 +52,7 @@ public class TransactionService {
             to.getId(),
             dto.getAmount(),
             from.getCurrency(),
-            TypeTransaction.TRANSFER,
+            TransactionType.TRANSFER,
             idempotencyKey,
                 userId,dto.getCategoryId()
         );
@@ -76,7 +76,7 @@ public class TransactionService {
                 targetAccount.getId(),
                 dto.getAmount(),
                 targetAccount.getCurrency(),
-                TypeTransaction.DEPOSIT,
+                TransactionType.DEPOSIT,
                 idempotencyKey,
                 userId,null
         );
@@ -97,7 +97,7 @@ public class TransactionService {
                 null,
                 dto.getAmount(),
                 sourceAccount.getCurrency(),
-                TypeTransaction.WITHDRAW,
+                TransactionType.WITHDRAW,
                 idempotencyKey,
                 userId,dto.getCategoryId()
 
@@ -116,8 +116,8 @@ public class TransactionService {
     }
     private TransactionResponseDto processTransaction(
             Long sourceAccountId, Long targetAccountId, BigDecimal amount,
-            Currency currency, TypeTransaction type, String idempotencyKey,
-            Long userId,Long categoryId)
+            Currency currency, TransactionType type, String idempotencyKey,
+            Long userId, Long categoryId)
     {
         TransactionCategory category = categoryService.validateAndGetCategory(categoryId, userId, type);
         Optional<Transaction> existingTx = transactionRepository.findByIdempotencyKey(idempotencyKey);
@@ -160,25 +160,25 @@ public class TransactionService {
             throw new InternalServerErrorException("Unexpected error");
         }
     }
-     void executeFinancialOperations(Transaction tx, TypeTransaction type,
+     void executeFinancialOperations(Transaction tx, TransactionType type,
                                             Long sourceAccountId, Long targetAccountId, BigDecimal amount) {
-        if (type == TypeTransaction.TRANSFER) {
+        if (type == TransactionType.TRANSFER) {
             executeSaga(tx, sourceAccountId, targetAccountId, amount);
-        } else if (type == TypeTransaction.DEPOSIT) {
+        } else if (type == TransactionType.DEPOSIT) {
             executeCredit(tx.getId(), targetAccountId, amount);
-        } else if (type == TypeTransaction.WITHDRAW) {
+        } else if (type == TransactionType.WITHDRAW) {
             executeDebit(tx.getId(), sourceAccountId, amount);
         }
     }
 
     @Transactional
     public Transaction createTransaction(Long sourceId, Long targetId, BigDecimal amount,
-                                         Currency currency, TypeTransaction type, String idempotencyKey, Long userId, TransactionCategory category) {
+                                         Currency currency, TransactionType type, String idempotencyKey, Long userId, TransactionCategory category) {
 
 
         BigDecimal rate = BigDecimal.ONE;
         BigDecimal targetAmount = amount;
-        if (type == TypeTransaction.TRANSFER && targetId != null) {
+        if (type == TransactionType.TRANSFER && targetId != null) {
             AccountResponseDto targetAcc = accountClient.getAccountById(targetId);
             if (!currency.equals(targetAcc.getCurrency())) {
                 rate = exchangeRateService.getRate(currency, targetAcc.getCurrency());
@@ -196,12 +196,12 @@ public class TransactionService {
                 .currency(currency)
                 .createdAt(LocalDateTime.now())
                 .idempotencyKey(idempotencyKey)
-                .typeTransaction(type)
+                .transactionType(type)
                 .step(TransactionStep.NONE)
                 .category(category)
                 .build();
 
-        BigDecimal limitAmount = type == TypeTransaction.TRANSFER ? targetAmount : amount;
+        BigDecimal limitAmount = type == TransactionType.TRANSFER ? targetAmount : amount;
         limitService.checkTransactionLimit(userId, limitAmount);
         Transaction saved = transactionRepository.save(tx);
         log.info("TX {} created (Type: {})", saved.getId(), type);
@@ -327,7 +327,7 @@ public class TransactionService {
                 transaction.getCreatedAt(),
                 transaction.getErrorMessage(),
                 transaction.getUpdatedAt(),
-                transaction.getTypeTransaction(),
+                transaction.getTransactionType(),
                 transaction.getCategory()
         );
     }

@@ -61,12 +61,12 @@ public class SecurityConfig {
              http.csrf(AbstractHttpConfigurer::disable)
                      .authorizeHttpRequests(auth -> auth
                              .requestMatchers(
-                                     "/api/auth/**",
+                                     "/api/v1/auth/**",
                                      "/swagger-ui/**",
                                      "/v3/api-docs/**"
                              ).permitAll()
-                             .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                             .requestMatchers("/api/user/**").hasRole("USER")
+                             .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                             .requestMatchers("/api/v1/user/**").hasRole("USER")
                              .anyRequest().authenticated())
                      .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                      .authenticationProvider(authenticationProvider)

@@ -8,16 +8,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import transaction_service.transaction_service.dto.CategoryStatDto;
-import transaction_service.transaction_service.model.Status;
 import transaction_service.transaction_service.model.TransactionCategory;
-import transaction_service.transaction_service.model.TypeTransaction;
+import transaction_service.transaction_service.model.TransactionType;
 import transaction_service.transaction_service.repository.TransactionCategoryRepository;
 import transaction_service.transaction_service.repository.TransactionRepository;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -91,32 +86,13 @@ public class CategoryServiceTest {
         verify(categoryRepository, never()).save(any());
     }
 
-    //getCategoryStats
-    @Test
-    @DisplayName("Should map repository objects to CategoryStatDto")
-    void getCategoryStats_MapsCorrectly() {
-        LocalDateTime from = LocalDateTime.now().minusDays(1);
-        LocalDateTime to = LocalDateTime.now();
 
-        List<Object[]> mockResults = Collections.singletonList(
-                new Object[]{100L, "FOOD", new BigDecimal("150.00")}
-        );
-
-        when(transactionRepository.getStatsByCategory(userId, Status.COMPLETED, from, to))
-                .thenReturn(mockResults);
-
-        List<CategoryStatDto> stats = categoryService.getCategoryStats(userId, from, to);
-
-        assertEquals(1, stats.size());
-        assertEquals("FOOD", stats.get(0).getName());
-        assertEquals(new BigDecimal("150.00"), stats.get(0).getTotalAmount());
-    }
     //validateAndGetCategory
 
     @Test
     @DisplayName("Should return null for DEPOSIT type")
     void validate_ReturnNullForDeposit() {
-        TransactionCategory result = categoryService.validateAndGetCategory(1L, userId, TypeTransaction.DEPOSIT);
+        TransactionCategory result = categoryService.validateAndGetCategory(1L, userId, TransactionType.DEPOSIT);
         assertNull(result);
         verifyNoInteractions(categoryRepository);
     }
@@ -125,7 +101,7 @@ public class CategoryServiceTest {
     @DisplayName("Should throw BadRequest when categoryId is null for non-deposit")
     void validate_ThrowsIfIdIsNull() {
         assertThrows(BadRequestException.class, () ->
-                categoryService.validateAndGetCategory(null, userId, TypeTransaction.TRANSFER));
+                categoryService.validateAndGetCategory(null, userId, TransactionType.TRANSFER));
     }
 
     @Test
@@ -134,7 +110,7 @@ public class CategoryServiceTest {
         when(categoryRepository.findById(999L)).thenReturn(Optional.empty());
 
         assertThrows(BadRequestException.class, () ->
-                categoryService.validateAndGetCategory(999L, userId, TypeTransaction.TRANSFER));
+                categoryService.validateAndGetCategory(999L, userId, TransactionType.TRANSFER));
     }
 
     @Test
@@ -147,7 +123,7 @@ public class CategoryServiceTest {
         when(categoryRepository.findById(300L)).thenReturn(Optional.of(otherUserCategory));
 
         assertThrows(ForbiddenException.class, () ->
-                categoryService.validateAndGetCategory(300L, userId, TypeTransaction.TRANSFER));
+                categoryService.validateAndGetCategory(300L, userId, TransactionType.TRANSFER));
     }
 
     @Test
@@ -155,7 +131,7 @@ public class CategoryServiceTest {
     void validate_AllowsGlobalCategory() {
         when(categoryRepository.findById(100L)).thenReturn(Optional.of(globalCategory));
 
-        TransactionCategory result = categoryService.validateAndGetCategory(100L, userId, TypeTransaction.TRANSFER);
+        TransactionCategory result = categoryService.validateAndGetCategory(100L, userId, TransactionType.TRANSFER);
 
         assertNotNull(result);
         assertNull(result.getUserId());
@@ -166,7 +142,7 @@ public class CategoryServiceTest {
     void validate_AllowsOwnCategory() {
         when(categoryRepository.findById(200L)).thenReturn(Optional.of(userCategory));
 
-        TransactionCategory result = categoryService.validateAndGetCategory(200L, userId, TypeTransaction.TRANSFER);
+        TransactionCategory result = categoryService.validateAndGetCategory(200L, userId, TransactionType.TRANSFER);
 
         assertNotNull(result);
         assertEquals(userId, result.getUserId());

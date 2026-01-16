@@ -43,7 +43,7 @@ public class Transaction {
     private String idempotencyKey;
     @Enumerated(EnumType.STRING)
     @Column( nullable = false)
-    private TypeTransaction typeTransaction;
+    private TransactionType transactionType;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "transaction_step", nullable = false)

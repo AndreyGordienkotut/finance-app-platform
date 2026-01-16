@@ -10,7 +10,7 @@ import transaction_service.transaction_service.dto.LimitUpdateRequestDto;
 import transaction_service.transaction_service.service.LimitService;
 
 @RestController
-@RequestMapping("/api/limits")
+@RequestMapping("/api/v1/limits")
 @RequiredArgsConstructor
 public class LimitController {
     private final LimitService limitService;

@@ -40,10 +40,10 @@ public class TransactionRecoveryService {
 
         for (Transaction tx : stuckTransactions) {
             try {
-                log.info("TX {} attempting retry (Type: {}, Step: {})", tx.getId(), tx.getTypeTransaction(), tx.getStep());
+                log.info("TX {} attempting retry (Type: {}, Step: {})", tx.getId(), tx.getTransactionType(), tx.getStep());
                 transactionService.executeFinancialOperations(
                         tx,
-                        tx.getTypeTransaction(),
+                        tx.getTransactionType(),
                         tx.getSourceAccountId(),
                         tx.getTargetAccountId(),
                         tx.getAmount()

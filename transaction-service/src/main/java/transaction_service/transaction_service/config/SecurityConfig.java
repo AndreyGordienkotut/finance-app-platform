@@ -19,17 +19,17 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/auth/**",
+                                "/api/v1/auth/**",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
                         ).permitAll()
-                        .requestMatchers("/api/test/test-principal").authenticated()
-                        .requestMatchers("/api/test/admin-stats").hasRole("ADMIN")
-                        .requestMatchers("/api/transaction/**").authenticated()
-                        .requestMatchers("/api/transactions/stats/**").authenticated()
-                        .requestMatchers("/api/categories/**").authenticated()
-                        .requestMatchers("/api/account/**").authenticated()
-                        .requestMatchers("/api/limits/**").authenticated()
+                        .requestMatchers("/api/v1/test/test-principal").authenticated()
+                        .requestMatchers("/api/v1/test/admin-stats").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/transactions/**").authenticated()
+                        .requestMatchers("/api/v1/analytics/**").authenticated()
+                        .requestMatchers("/api/v1/categories/**").authenticated()
+                        .requestMatchers("/api/v1/accounts/**").authenticated()
+                        .requestMatchers("/api/v1/limits/**").authenticated()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().denyAll());
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

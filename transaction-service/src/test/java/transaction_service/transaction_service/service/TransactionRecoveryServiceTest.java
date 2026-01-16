@@ -33,7 +33,7 @@ class TransactionRecoveryServiceTest {
         stuckTx = Transaction.builder()
                 .id(999L)
                 .status(Status.PROCESSING)
-                .typeTransaction(TypeTransaction.TRANSFER)
+                .transactionType(TransactionType.TRANSFER)
                 .sourceAccountId(1L)
                 .targetAccountId(2L)
                 .amount(new BigDecimal("100.00"))
@@ -63,7 +63,7 @@ class TransactionRecoveryServiceTest {
         recoveryService.recoverStuckTransactions();
         verify(transactionService).executeFinancialOperations(
                 eq(stuckTx),
-                eq(TypeTransaction.TRANSFER),
+                eq(TransactionType.TRANSFER),
                 eq(1L),
                 eq(2L),
                 eq(new BigDecimal("100.00"))

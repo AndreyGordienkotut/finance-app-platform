@@ -16,11 +16,11 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 
 @RestController
-@RequestMapping("/api/account")
+@RequestMapping("/api/v1/accounts")
 @RequiredArgsConstructor
 public class AccountController {
     private final AccountService accountService;
-    @PostMapping("/create")
+    @PostMapping
     public ResponseEntity<AccountResponseDto> createAccount(@Valid @RequestBody AccountRequestDto requestDto,
                                                             @AuthenticationPrincipal AuthenticatedUser user) {
         AccountResponseDto accountResponseDto = accountService.createAccount(requestDto, user.userId());

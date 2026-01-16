@@ -23,7 +23,6 @@ import transaction_service.transaction_service.repository.TransactionRepository;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -89,7 +88,7 @@ public class TransactionServiceTest {
                 .amount(BigDecimal.valueOf(100))
                 .currency(Currency.USD)
                 .status(Status.CREATED)
-                .typeTransaction(TypeTransaction.TRANSFER)
+                .transactionType(TransactionType.TRANSFER)
                 .step(TransactionStep.NONE)
                 .createdAt(LocalDateTime.now())
                 .idempotencyKey(idempotencyKey)
@@ -101,7 +100,7 @@ public class TransactionServiceTest {
                 .amount(BigDecimal.valueOf(100))
                 .currency(Currency.USD)
                 .status(Status.PROCESSING)
-                .typeTransaction(TypeTransaction.TRANSFER)
+                .transactionType(TransactionType.TRANSFER)
                 .step(TransactionStep.NONE)
                 .createdAt(LocalDateTime.now())
                 .idempotencyKey(idempotencyKey)

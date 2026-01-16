@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 import core.core.enums.Currency;
 import transaction_service.transaction_service.model.Status;
 import transaction_service.transaction_service.model.TransactionCategory;
-import transaction_service.transaction_service.model.TypeTransaction;
+import transaction_service.transaction_service.model.TransactionType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -28,7 +28,7 @@ public class TransactionResponseDto {
     private LocalDateTime createdAt;
     private String error;
     private LocalDateTime updatedAt;
-    private TypeTransaction typeTransaction;
+    private TransactionType transactionType;
     private TransactionCategory category;
 
 }
