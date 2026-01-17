@@ -24,6 +24,7 @@ import transaction_service.transaction_service.repository.TransactionRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -107,53 +108,96 @@ public class TransactionServiceTest {
                 .build();
         lenient().when(categoryService.validateAndGetCategory(any(), any(), any())).thenReturn(null);
     }
-//    @Test
-//    @DisplayName("Succeed transfer (Same Currency)")
-//    void testSuccessfulTransfer() {
-//        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-//        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-//        when(categoryService.validateAndGetCategory(any(), any(), any())).thenReturn(null);
-//        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
-//        when(transactionRepository.save(any(Transaction.class))).thenReturn(txCreated);
-//        when(transactionRepository.findById(100L)).thenReturn(Optional.of(txCreated));
-//
-//        transactionService.transfer(transferDto, userId, idempotencyKey);
-//
-//        verify(limitService).checkTransactionLimit(eq(userId), any());
-//        verify(accountClient).debit(eq(1L), eq(BigDecimal.valueOf(100)), eq(100L));
-//        verify(accountClient).credit(eq(2L), eq(BigDecimal.valueOf(100)), eq(100L));
-//
-//        ArgumentCaptor<Transaction> txCaptor = ArgumentCaptor.forClass(Transaction.class);
-//        verify(transactionRepository, atLeastOnce()).save(txCaptor.capture());
-//        assertEquals(Status.COMPLETED, txCaptor.getAllValues().get(txCaptor.getAllValues().size()-1).getStatus());
-//    }
-//    @Test
-//    @DisplayName("Transfer with Currency Conversion")
-//    void testTransferWithConversion() {
-//        toAccount.setCurrency(Currency.EUR);
-//        BigDecimal rate = new BigDecimal("0.9");
-//        BigDecimal expectedTargetAmount = new BigDecimal("90.00");
-//
-//        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-//        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-//
-//        when(exchangeRateService.getRate(Currency.USD, Currency.EUR)).thenReturn(rate);
-//        when(exchangeRateService.convert(any(), any())).thenReturn(expectedTargetAmount);
-//
-//        when(transactionRepository.save(any(Transaction.class)))
-//                .thenAnswer(invocation -> {
-//                    Transaction saved = invocation.getArgument(0);
-//                    saved.setId(TX_ID);
-//                    return saved;
-//                });
-//
-//        when(transactionRepository.findById(TX_ID)).thenReturn(Optional.of(txCreated));
-//
-//        transactionService.transfer(transferDto, userId, idempotencyKey);
-//
-//        verify(exchangeRateService).getRate(Currency.USD, Currency.EUR);
-//        verify(accountClient).credit(eq(2L), eq(expectedTargetAmount), eq(TX_ID));
-//    }
+    @Test
+    @DisplayName("Succeed transfer (same currency)")
+    void transfer_succeed_sameCurrency() {
+        BigDecimal amount = new BigDecimal("100");
+        AtomicReference<Transaction> savedTx = new AtomicReference<>();
+
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+        when(transactionRepository.save(any(Transaction.class)))
+                .thenAnswer(invocation -> {
+                    Transaction tx = invocation.getArgument(0);
+                    tx.setId(TX_ID);
+                    savedTx.set(tx);
+                    return tx;
+                });
+        when(transactionRepository.findById(TX_ID))
+                .thenAnswer(invocation -> Optional.of(savedTx.get()));
+        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
+        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+        TransactionResponseDto result =
+                transactionService.transfer(transferDto, userId, idempotencyKey);
+        assertNotNull(result);
+
+        verify(accountClient).debit(
+                eq(1L),
+                eq(amount),
+                eq(TX_ID)
+        );
+        verify(accountClient).credit(
+                eq(2L),
+                eq(amount),
+                eq(TX_ID)
+        );
+    }
+    @Test
+    @DisplayName("Transfer with Currency Conversion")
+    void transfer_succeed_withCurrencyConversion() {
+        BigDecimal amount = new BigDecimal("100");
+        BigDecimal rate = new BigDecimal("0.9");
+        BigDecimal converted = new BigDecimal("90.0");
+
+        fromAccount.setCurrency(Currency.USD);
+        toAccount.setCurrency(Currency.EUR);
+
+        AtomicReference<Transaction> savedTx = new AtomicReference<>();
+
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+
+        when(exchangeRateService.getRate(Currency.USD, Currency.EUR))
+                .thenReturn(rate);
+
+        when(exchangeRateService.convert(amount, rate))
+                .thenReturn(converted);
+
+        when(transactionRepository.save(any(Transaction.class)))
+                .thenAnswer(invocation -> {
+                    Transaction tx = invocation.getArgument(0);
+                    tx.setId(TX_ID);
+                    savedTx.set(tx);
+                    return tx;
+                });
+
+        when(transactionRepository.findById(TX_ID))
+                .thenAnswer(invocation -> Optional.of(savedTx.get()));
+
+        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
+        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+
+        TransactionResponseDto result =
+                transactionService.transfer(transferDto, userId, idempotencyKey);
+
+        assertNotNull(result);
+
+        verify(accountClient).debit(
+                eq(1L),
+                eq(amount),
+                eq(TX_ID)
+        );
+        verify(accountClient).credit(
+                eq(2L),
+                eq(converted),
+                eq(TX_ID)
+        );
+        verify(exchangeRateService)
+                .getRate(Currency.USD, Currency.EUR);
+
+        verify(exchangeRateService)
+                .convert(amount, rate);
+    }
     @Test
     @DisplayName("Should throw LimitExceededException and stop process")
     void testLimitExceeded() {
@@ -200,86 +244,88 @@ public class TransactionServiceTest {
         verify(accountClient).credit(eq(1L), eq(new BigDecimal("500")), anyLong());
         verify(accountClient, never()).debit(any(), any(), any());
     }
-//    @Test
-//    @DisplayName("Credit failed - rollback succeed")
-//    void testCreditFailsRollbackSuccess() {
-//        fromAccount.setBalance(BigDecimal.valueOf(1000));
-//
-//        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-//        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-//
-//        doNothing().when(accountClient).debit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
-//
-//        FeignException feignException = mock(FeignException.class);
-//        when(feignException.getMessage()).thenReturn("Credit failed");
-//
-//        doThrow(feignException)
-//                .when(accountClient).credit(eq(2L), eq(BigDecimal.valueOf(100)), anyLong());
-//
-//        doNothing().when(accountClient).credit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
-//
-//        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
-//        when(transactionRepository.save(any(Transaction.class))).thenReturn(txCreated);
-//        when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(txCreated));
-//
-//        assertThrows(BadRequestException.class,
-//                () -> transactionService.transfer(transferDto, userId, idempotencyKey));
-//
-//        ArgumentCaptor<Transaction> txCaptor = ArgumentCaptor.forClass(Transaction.class);
-//        verify(transactionRepository, atLeast(4)).save(txCaptor.capture());
-//
-//        Transaction last = txCaptor.getAllValues().stream()
-//                .filter(t -> t.getStatus() == Status.FAILED)
-//                .findFirst().orElseThrow();
-//
-//        assertEquals(Status.FAILED, last.getStatus());
-//        assertTrue(last.getErrorMessage().contains("Transfer failed"));
-//
-//        verify(accountClient).debit(1L, BigDecimal.valueOf(100), 10L);
-//        verify(accountClient).credit(2L, BigDecimal.valueOf(100), 10L);
-//        verify(accountClient).credit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
-//    }
-//    @Test
-//    @DisplayName("Credit failed - rollback failed")
-//    void testCreditFailsRollbackFailed() {
-//        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-//        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-//
-//        doNothing().when(accountClient).debit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
-//
-//        FeignException feignCredit = mock(FeignException.class);
-//        when(feignCredit.getMessage()).thenReturn("Credit failed");
-//
-//        FeignException feignCompensate = mock(FeignException.class);
-//
-//        doThrow(feignCredit)
-//                .when(accountClient).credit(eq(2L), eq(BigDecimal.valueOf(100)), anyLong());
-//        doThrow(new RuntimeException("Compensation failed", feignCompensate))
-//                .when(accountClient).credit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
-//
-//        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
-//
-//        when(transactionRepository.save(any(Transaction.class))).thenReturn(txCreated);
-//
-//        when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(txCreated));
-//
-//        assertThrows(BadRequestException.class,
-//                () -> transactionService.transfer(transferDto, userId, idempotencyKey));
-//
-//        ArgumentCaptor<Transaction> txCaptor = ArgumentCaptor.forClass(Transaction.class);
-//        verify(transactionRepository, atLeast(4)).save(txCaptor.capture());
-//
-//        Transaction last = txCaptor.getAllValues().stream()
-//                .filter(t -> t.getStatus() == Status.FAILED)
-//                .findFirst().orElseThrow();
-//
-//        assertEquals(Status.FAILED, last.getStatus());
-//        assertTrue(last.getErrorMessage().contains("Compensation failed"));
-//
-//        verify(accountClient).debit(1L, BigDecimal.valueOf(100), 10L);
-//        verify(accountClient).credit(2L, BigDecimal.valueOf(100), 10L);
-//        verify(accountClient).credit(1L, BigDecimal.valueOf(100), 10L);
-//    }
+    @Test
+    @DisplayName("Credit failed - rollback succeed")
+    void transfer_creditFailed_rollbackSucceed() {
+        BigDecimal amount = new BigDecimal("100");
+
+        fromAccount.setCurrency(Currency.USD);
+        toAccount.setCurrency(Currency.USD);
+        AtomicReference<Transaction> savedTx = new AtomicReference<>();
+
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+        when(transactionRepository.save(any(Transaction.class)))
+                .thenAnswer(invocation -> {
+                    Transaction tx = invocation.getArgument(0);
+                    tx.setId(TX_ID);
+                    savedTx.set(tx);
+                    return tx;
+                });
+        when(transactionRepository.findById(TX_ID))
+                .thenAnswer(invocation -> Optional.of(savedTx.get()));
+        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
+        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+
+        doNothing().when(accountClient)
+                .debit(1L, amount, TX_ID);
+        doThrow(new RuntimeException("Credit failed"))
+                .when(accountClient)
+                .credit(2L, amount, TX_ID);
+        doNothing().when(accountClient)
+                .credit(1L, amount, TX_ID);
+
+        assertThrows(RuntimeException.class, () ->
+                transactionService.transfer(transferDto, userId, idempotencyKey)
+        );
+
+        verify(accountClient).debit(1L, amount, TX_ID);
+        verify(accountClient).credit(2L, amount, TX_ID);
+        verify(accountClient).credit(1L, amount, TX_ID);
+
+        assertEquals(Status.FAILED, savedTx.get().getStatus());
+    }
+    @Test
+    @DisplayName("Credit failed - rollback failed")
+    void transfer_creditFailed_rollbackFailed() {
+        BigDecimal amount = new BigDecimal("100");
+
+        fromAccount.setCurrency(Currency.USD);
+        toAccount.setCurrency(Currency.USD);
+
+        AtomicReference<Transaction> savedTx = new AtomicReference<>();
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+        when(transactionRepository.save(any(Transaction.class)))
+                .thenAnswer(invocation -> {
+                    Transaction tx = invocation.getArgument(0);
+                    tx.setId(TX_ID);
+                    savedTx.set(tx);
+                    return tx;
+                });
+        when(transactionRepository.findById(TX_ID))
+                .thenAnswer(invocation -> Optional.of(savedTx.get()));
+
+        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
+        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+        doNothing().when(accountClient)
+                .debit(1L, amount, TX_ID);
+        doThrow(new RuntimeException("Credit failed"))
+                .when(accountClient)
+                .credit(2L, amount, TX_ID);
+        doThrow(new RuntimeException("Rollback failed"))
+                .when(accountClient)
+                .credit(1L, amount, TX_ID);
+        assertThrows(RuntimeException.class, () ->
+                transactionService.transfer(transferDto, userId, idempotencyKey)
+        );
+
+        verify(accountClient).debit(1L, amount, TX_ID);
+        verify(accountClient).credit(2L, amount, TX_ID);
+        verify(accountClient).credit(1L, amount, TX_ID);
+
+        assertEquals(Status.FAILED, savedTx.get().getStatus());
+    }
     @Test
     @DisplayName("Idempotency: Existing COMPLETED transaction")
     void testIdempotency_Completed() {
@@ -376,18 +422,6 @@ public class TransactionServiceTest {
                 () -> transactionService.transfer(transferDto, userId, idempotencyKey));
     }
 
-//    @Test
-//    @DisplayName("Validate: Currency mismatch -> BadRequest")
-//    void testValidateDifferentCurrencies() {
-//        toAccount.setCurrency(Currency.EUR);
-//
-//        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-//        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-//
-//        assertThrows(BadRequestException.class,
-//                () -> transactionService.transfer(transferDto, userId, idempotencyKey));
-//    }
-
     @Test
     @DisplayName("Validate: Not enough money -> BadRequest")
     void testValidateNotEnoughMoney() {
@@ -400,8 +434,9 @@ public class TransactionServiceTest {
                 () -> transactionService.transfer(transferDto, userId, idempotencyKey));
     }
     @Test
-    @DisplayName("Unexpected exception during SAGA -> InternalServerError")
+    @DisplayName("Unexpected exception during SAGA -> BadRequestException")
     void testUnexpectedExceptionDuringSaga() {
+        txCreated.setTargetAmount(BigDecimal.valueOf(100));
         when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
         when(accountClient.getAccountById(2L)).thenReturn(toAccount);
 
@@ -413,19 +448,22 @@ public class TransactionServiceTest {
         when(transactionRepository.save(any(Transaction.class))).thenReturn(txCreated);
         when(transactionRepository.findById(anyLong())).thenReturn(Optional.of(txCreated));
 
-        assertThrows(InternalServerErrorException.class,
+        assertThrows(BadRequestException.class,
                 () -> transactionService.transfer(transferDto, userId, idempotencyKey));
 
         ArgumentCaptor<Transaction> txCaptor = ArgumentCaptor.forClass(Transaction.class);
         verify(transactionRepository, atLeast(3)).save(txCaptor.capture());
 
-        verify(accountClient, never()).credit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
+        verify(accountClient).credit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
+        verify(accountClient).debit(eq(1L), eq(BigDecimal.valueOf(100)), anyLong());
+        verify(accountClient).credit(eq(2L), eq(BigDecimal.valueOf(100)), anyLong());
+
 
         Transaction last = txCaptor.getAllValues().stream()
                 .filter(t -> t.getStatus() == Status.FAILED)
                 .findFirst().orElseThrow();
 
         assertEquals(Status.FAILED, last.getStatus());
-        assertTrue(last.getErrorMessage().contains("Unexpected error"));
+        assertTrue(last.getErrorMessage().contains("Transfer failed"));
     }
 }

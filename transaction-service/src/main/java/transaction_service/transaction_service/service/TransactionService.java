@@ -222,7 +222,7 @@ public class TransactionService {
                 executeCredit(tx.getId(), toId, tx.getTargetAmount());
                 updateStep(tx.getId(), TransactionStep.CREDIT_DONE);
             }
-        } catch (FeignException e) {
+        } catch (Exception  e) {
             log.warn("TX {} remote call failed: {}", tx.getId(), e.getMessage());
 
             if (debitSucceeded) {
@@ -264,7 +264,8 @@ public class TransactionService {
             throw new BadRequestException("Same account");
         }
 
-        if (from.getStatus() == StatusAccount.CLOSED || to.getStatus() == StatusAccount.CLOSED) {
+        if (StatusAccount.CLOSED.equals(from.getStatus())
+                || StatusAccount.CLOSED.equals(to.getStatus())) {
             throw new BadRequestException("Account is closed");
         }
 
