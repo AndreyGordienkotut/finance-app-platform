@@ -9,6 +9,8 @@ import account_service.account_service.model.Account;
 import core.core.enums.StatusAccount;
 import account_service.account_service.repository.AccountRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,7 @@ import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AccountService {
     private final AccountRepository accountRepository;
     private final AppliedTransactionRepository appliedTransactionRepository;
@@ -78,11 +81,21 @@ public class AccountService {
     }
     @Transactional
     public void debit( Long accountId, BigDecimal amount,Long transactionId) {
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException("Amount must be positive");
+        }
+
         if (appliedTransactionRepository.existsByTransactionIdAndAccountId(transactionId, accountId)) {
             return;
         }
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new BadRequestException("Account not found"));
+        Account account;
+        try {
+            account = accountRepository.findByIdWithLock(accountId)
+                    .orElseThrow(() -> new BadRequestException("Account not found"));
+        } catch (PessimisticLockingFailureException e) {
+            log.warn("Locking failed for account {} during debit", accountId);
+            throw new ConflictException("Account is busy, retry later", e.getCause());
+        }
 
         if (account.getStatusAccount() != StatusAccount.ACTIVE) {
             throw new BadRequestException("Account is not active");
@@ -90,9 +103,7 @@ public class AccountService {
         if (account.getBalance().compareTo(amount) < 0) {
             throw new BadRequestException("Insufficient funds");
         }
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BadRequestException("Amount must be positive");
-        }
+
 
         account.setBalance(account.getBalance().subtract(amount));
         accountRepository.save(account);
@@ -108,19 +119,24 @@ public class AccountService {
 
     @Transactional
     public void credit(Long accountId, BigDecimal amount, Long transactionId) {
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException("Amount must be positive");
+        }
         if (appliedTransactionRepository.existsByTransactionIdAndAccountId(transactionId, accountId)) {
             return;
         }
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new BadRequestException("Account not found"));
+        Account account;
+        try {
+            account = accountRepository.findByIdWithLock(accountId)
+                    .orElseThrow(() -> new BadRequestException("Account not found"));
+        } catch (PessimisticLockingFailureException e) {
+            log.warn("Locking failed for account {} during credit", accountId);
+            throw new ConflictException("Account is busy, retry later", e.getCause());
+        }
 
         if (account.getStatusAccount() != StatusAccount.ACTIVE) {
             throw new BadRequestException("Account is not active");
         }
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BadRequestException("Amount must be positive");
-        }
-
         account.setBalance(account.getBalance().add(amount));
         accountRepository.save(account);
         appliedTransactionRepository.save(

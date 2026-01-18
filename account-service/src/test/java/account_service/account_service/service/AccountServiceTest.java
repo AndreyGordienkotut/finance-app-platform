@@ -29,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -184,7 +185,7 @@ public class AccountServiceTest {
     void testDebit_Success() {
         BigDecimal debitAmount = BigDecimal.valueOf(100);
         when(appliedTransactionRepository.existsByTransactionIdAndAccountId(TX_ID, ACCOUNT_ID)).thenReturn(false);
-        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(activeAccount));
 
         accountService.debit(ACCOUNT_ID, debitAmount, TX_ID);
 
@@ -214,7 +215,7 @@ public class AccountServiceTest {
     void testDebit_InsufficientFunds() {
         BigDecimal debitAmount = BigDecimal.valueOf(600);
         when(appliedTransactionRepository.existsByTransactionIdAndAccountId(TX_ID, ACCOUNT_ID)).thenReturn(false);
-        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(activeAccount));
 
         assertThrows(BadRequestException.class,
                 () -> accountService.debit(ACCOUNT_ID, debitAmount, TX_ID),
@@ -232,7 +233,7 @@ public class AccountServiceTest {
         closedAccount.setStatusAccount(StatusAccount.CLOSED);
 
         when(appliedTransactionRepository.existsByTransactionIdAndAccountId(TX_ID, closedAccount.getId())).thenReturn(false);
-        when(accountRepository.findById(closedAccount.getId())).thenReturn(Optional.of(closedAccount));
+        when(accountRepository.findByIdWithLock(closedAccount.getId())).thenReturn(Optional.of(closedAccount));
 
         assertThrows(BadRequestException.class,
                 () -> accountService.debit(closedAccount.getId(), debitAmount, TX_ID),
@@ -246,7 +247,7 @@ public class AccountServiceTest {
     void testCredit_Success() {
         BigDecimal creditAmount = BigDecimal.valueOf(150);
         when(appliedTransactionRepository.existsByTransactionIdAndAccountId(TX_ID, ACCOUNT_ID)).thenReturn(false);
-        when(accountRepository.findById(ACCOUNT_ID)).thenReturn(Optional.of(activeAccount));
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(activeAccount));
 
         accountService.credit(ACCOUNT_ID, creditAmount, TX_ID);
 
@@ -279,13 +280,24 @@ public class AccountServiceTest {
         closedAccount.setStatusAccount(StatusAccount.CLOSED);
 
         when(appliedTransactionRepository.existsByTransactionIdAndAccountId(TX_ID, closedAccount.getId())).thenReturn(false);
-        when(accountRepository.findById(closedAccount.getId())).thenReturn(Optional.of(closedAccount));
+        when(accountRepository.findByIdWithLock(closedAccount.getId())).thenReturn(Optional.of(closedAccount));
 
         assertThrows(BadRequestException.class,
                 () -> accountService.credit(closedAccount.getId(), creditAmount, TX_ID),
                 "Expected BadRequestException for Inactive Account");
 
         verify(accountRepository, never()).save(any());
+    }
+    @Test
+    @DisplayName("Debit: Should throw exception when funds are insufficient")
+    void debit_InsufficientFunds_ThrowsBadRequestException() {
+        activeAccount.setBalance(new BigDecimal("50.00"));
+        when(accountRepository.findByIdWithLock(ACCOUNT_ID)).thenReturn(Optional.of(activeAccount));
+        when(appliedTransactionRepository.existsByTransactionIdAndAccountId(anyLong(), anyLong())).thenReturn(false);
+
+        assertThrows(BadRequestException.class, () ->
+                accountService.debit(ACCOUNT_ID, new BigDecimal("100.00"), TX_ID)
+        );
     }
 }
 
