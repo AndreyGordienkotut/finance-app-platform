@@ -25,7 +25,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
             "WHERE t.userId = :userId " +
             "AND t.createdAt > :since " +
             "AND t.status = 'COMPLETED' " +
-            "AND t.typeTransaction IN ('TRANSFER', 'WITHDRAW')")
+            "AND t.transactionType IN ('TRANSFER', 'WITHDRAW')")
     BigDecimal calculateTotalSpentForUserInLast24Hours(
             @Param("userId") Long userId,
             @Param("since") LocalDateTime since
@@ -38,7 +38,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
         LEFT JOIN t.category c 
         WHERE t.userId = :userId 
         AND t.status = :status 
-        AND t.typeTransaction IN ('TRANSFER', 'WITHDRAW')
+        AND t.transactionType IN ('TRANSFER', 'WITHDRAW')
         AND t.category IS NOT NULL
         AND (:from IS NULL OR t.createdAt >= :from) 
         AND (:to IS NULL OR t.createdAt <= :to) 
@@ -54,7 +54,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
         FROM Transaction t
         WHERE t.userId = :userId 
         AND t.status = :status
-        AND t.typeTransaction IN ('TRANSFER', 'WITHDRAW')
+        AND t.transactionType IN ('TRANSFER', 'WITHDRAW')
         AND t.createdAt BETWEEN :from AND :to
     """)
     BigDecimal getTotalSpent(@Param("userId") Long userId,
@@ -67,7 +67,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
         FROM Transaction t JOIN t.category c 
         WHERE t.userId = :userId 
         AND t.status = :status
-        AND t.typeTransaction IN ('TRANSFER', 'WITHDRAW')
+        AND t.transactionType IN ('TRANSFER', 'WITHDRAW')
         AND t.createdAt BETWEEN :from AND :to 
         GROUP BY c.id, c.name 
         ORDER BY total DESC

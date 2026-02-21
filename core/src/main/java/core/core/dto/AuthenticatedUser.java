@@ -8,4 +8,5 @@ public record AuthenticatedUser(
         Long userId,
         String email,
         Collection<? extends GrantedAuthority> authorities
-) {}
+) {
+}

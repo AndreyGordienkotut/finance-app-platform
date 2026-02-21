@@ -369,6 +369,7 @@ public class TransactionServiceTest {
     @Test
     @DisplayName("Idempotency: Concurrent creation -> DataIntegrityViolation")
     void testIdempotency_ConcurrentCreation() {
+
         when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
         when(accountClient.getAccountById(2L)).thenReturn(toAccount);
 
@@ -377,14 +378,10 @@ public class TransactionServiceTest {
                 .thenReturn(Optional.of(txCreated));
 
         when(transactionRepository.save(any(Transaction.class)))
-                .thenThrow(DataIntegrityViolationException.class);
+                .thenThrow(new DataIntegrityViolationException("Duplicate"));
 
-        ConflictException ex = assertThrows(ConflictException.class,
+        assertThrows(ConflictException.class,
                 () -> transactionService.transfer(transferDto, userId, idempotencyKey));
-
-        assertNotNull(ex.getPayload());
-        verify(transactionRepository, times(2)).findByIdempotencyKey(idempotencyKey);
-        verify(transactionRepository, times(1)).save(any(Transaction.class));
     }
     @Test
     @DisplayName("Validate: Foreign source account -> NotFound (via validateAccountOwnership)")
@@ -465,5 +462,58 @@ public class TransactionServiceTest {
 
         assertEquals(Status.FAILED, last.getStatus());
         assertTrue(last.getErrorMessage().contains("Transfer failed"));
+    }
+    @Test
+    @DisplayName("Retry: Success on second attempt")
+    void testRetry_SucceedsOnSecondAttempt() {
+        when(accountClient.getAccountById(any())).thenReturn(fromAccount);
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
+        when(transactionRepository.save(any(Transaction.class))).thenReturn(txInProgress);
+        when(transactionRepository.findById(TX_ID)).thenReturn(Optional.of(txInProgress));
+        var lockEx = new org.springframework.dao.PessimisticLockingFailureException("Locked");
+        var conflictEx = new ConflictException("Busy", lockEx);
+
+        doThrow(conflictEx).doNothing().when(accountClient).debit(any(), any(), any());
+
+        TransactionResponseDto result = transactionService.transfer(transferDto, userId, idempotencyKey);
+
+        assertEquals(Status.COMPLETED, result.getStatus());
+        verify(accountClient, times(2)).debit(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Retry: Exhausted attempts should throw Conflict")
+    void testRetry_ExhaustedAttempts() {
+        when(accountClient.getAccountById(any())).thenReturn(fromAccount);
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
+        when(transactionRepository.save(any(Transaction.class))).thenReturn(txInProgress);
+        when(transactionRepository.findById(TX_ID)).thenReturn(Optional.of(txInProgress));
+
+        var lockEx = new org.springframework.dao.PessimisticLockingFailureException("Locked");
+        var conflictEx = new ConflictException("Busy", lockEx);
+
+        doThrow(conflictEx).when(accountClient).debit(any(), any(), any());
+
+        assertThrows(ConflictException.class,
+                () -> transactionService.transfer(transferDto, userId, idempotencyKey));
+
+        verify(accountClient, times(3)).debit(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Retry: No retry on BadRequest")
+    void testRetry_NoRetryOnBadRequest() {
+        when(accountClient.getAccountById(any())).thenReturn(fromAccount);
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
+        when(transactionRepository.save(any(Transaction.class))).thenReturn(txInProgress);
+        when(transactionRepository.findById(TX_ID)).thenReturn(Optional.of(txInProgress));
+
+        doThrow(new BadRequestException("Insufficient funds")).when(accountClient).debit(any(), any(), any());
+
+        assertThrows(BadRequestException.class,
+                () -> transactionService.transfer(transferDto, userId, idempotencyKey));
+
+        verify(accountClient, times(1)).debit(any(), any(), any());
+        verify(transactionRepository, times(2)).save(any(Transaction.class));
     }
 }

@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import transaction_service.transaction_service.dto.DepositRequestDto;
@@ -132,33 +133,55 @@ public class TransactionService {
         Transaction tx;
         try {
             tx = createTransaction(sourceAccountId, targetAccountId, amount, currency, type, idempotencyKey,userId,category);
-            updateStatus(tx.getId(), Status.PROCESSING, null);
         } catch (DataIntegrityViolationException e) {
             log.warn("Idempotency Key Conflict: Another process saved the transaction first. Key: {}", idempotencyKey);
             Transaction conflictTx = transactionRepository.findByIdempotencyKey(idempotencyKey)
                     .orElseThrow(() -> new InternalServerErrorException("Internal conflict handling error."));
+            return convertToDto(conflictTx);
+        }
+        int maxAttempts = 3;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                log.info("Attempt {}/{} for TX {}: starting financial operations", attempt, maxAttempts, tx.getId());
+                updateStatus(tx.getId(), Status.PROCESSING, "Attempt " + attempt);
 
-            TransactionResponseDto conflictTxDto = convertToDto(conflictTx);
-            if (conflictTx.getStatus() == Status.CREATED) {
-                throw new ConflictException("Transaction with this key is currently being processed.", conflictTxDto);
+                Transaction currentTx = transactionRepository.findById(tx.getId())
+                        .orElseThrow(() -> new NotFoundException("Transaction not found"));
+
+                executeFinancialOperations(currentTx, type, sourceAccountId, targetAccountId, amount);
+                updateStatus(currentTx.getId(), Status.COMPLETED, null);
+                return convertToDto(transactionRepository.findById(currentTx.getId()).orElseThrow());
+
+            } catch (ConflictException e) {
+                if (!(e.getCause() instanceof org.springframework.dao.PessimisticLockingFailureException)) {
+                    throw e;
+                }
+
+                log.warn("Retry Attempt {} failed for TX {}: Account busy (Lock).", attempt, tx.getId());
+
+                if (attempt == maxAttempts) {
+                    log.error("Max retry attempts reached for TX {}. Marking as FAILED.", tx.getId());
+                    updateStatus(tx.getId(), Status.FAILED, "Max retry attempts reached: " + e.getMessage());
+                    throw e;
+                }
+                try {
+                    Thread.sleep(100L * attempt);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new InternalServerErrorException("Retry interrupted");
+                }
+            } catch (BadRequestException e) {
+                updateStatus(tx.getId(), Status.FAILED, e.getMessage());
+                throw e;
+            } catch (Exception e) {
+                log.error("TX {} unexpected error: {}", tx.getId(), e.getMessage(), e);
+                updateStatus(tx.getId(), Status.FAILED, "Unexpected error: " + e.getMessage());
+                throw new InternalServerErrorException("Unexpected error during transaction processing");
             }
-
-            return conflictTxDto;
         }
-        try {
-            executeFinancialOperations(tx, type, sourceAccountId, targetAccountId, amount);
 
-            updateStatus(tx.getId(), Status.COMPLETED, null);
-            return convertToDto(transactionRepository.findById(tx.getId()).orElseThrow());
+        throw new InternalServerErrorException("Transaction failed after all retries");
 
-        } catch (BadRequestException e) {
-            updateStatus(tx.getId(), Status.FAILED, e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            log.error("TX {} unexpected error: {}", tx.getId(), e.getMessage(), e);
-            updateStatus(tx.getId(), Status.FAILED, "Unexpected error: " + e.getMessage());
-            throw new InternalServerErrorException("Unexpected error");
-        }
     }
      void executeFinancialOperations(Transaction tx, TransactionType type,
                                             Long sourceAccountId, Long targetAccountId, BigDecimal amount) {
@@ -222,7 +245,11 @@ public class TransactionService {
                 executeCredit(tx.getId(), toId, tx.getTargetAmount());
                 updateStep(tx.getId(), TransactionStep.CREDIT_DONE);
             }
-        } catch (Exception  e) {
+        }
+        catch (ConflictException e) {
+            throw e;
+        }
+        catch (Exception  e) {
             log.warn("TX {} remote call failed: {}", tx.getId(), e.getMessage());
 
             if (debitSucceeded) {
@@ -310,7 +337,6 @@ public class TransactionService {
             log.info("TX {} compensation SUCCESS", txId);
         } catch (FeignException e) {
             log.error("TX {} compensation FAILED: {}", txId, e.getMessage());
-//            updateStatus(txId, Status.FAILED, "Compensation failed: " + e.getMessage());
             throw new RuntimeException("Compensation failed", e);
         }
     }

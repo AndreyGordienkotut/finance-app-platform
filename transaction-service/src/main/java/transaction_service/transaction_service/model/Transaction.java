@@ -42,7 +42,7 @@ public class Transaction {
     @Column(name = "idempotency_key", unique = true, nullable = false)
     private String idempotencyKey;
     @Enumerated(EnumType.STRING)
-    @Column( nullable = false)
+    @Column(name = "transaction_type",  nullable = false)
     private TransactionType transactionType;
 
     @Enumerated(EnumType.STRING)
