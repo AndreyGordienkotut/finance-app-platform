@@ -10,6 +10,12 @@ application:
       cookie-name: jwt_token
       # DB
 spring:
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+    url: ${DB_URL_AUTH}
+    user: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   datasource:
     url: ${DB_URL_AUTH}
     username: ${DB_USERNAME}
@@ -18,7 +24,7 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
-      ddl-auto: none
+      ddl-auto: validate
   application:
     name: auth-service
 

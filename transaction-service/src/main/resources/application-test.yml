@@ -1,6 +1,12 @@
 JWT_SECRET: 1234mSlongtdmVyeS1zdHJvbmctc2VjcmV0LWtleS1mb3Itand0LXNpZ25pbmc=
 
 spring:
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+    url: ${DB_URL_TRAN}
+    user: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   datasource:
     url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL
     driver-class-name: org.h2.Driver

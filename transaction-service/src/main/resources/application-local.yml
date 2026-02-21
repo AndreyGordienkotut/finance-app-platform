@@ -7,6 +7,12 @@ eureka:
 server:
   port: 8082
 spring:
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+    url: ${DB_URL_TRAN}
+    user: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   datasource:
     url: ${DB_URL_TRAN}
     username: ${DB_USERNAME}
@@ -15,7 +21,7 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
-      ddl-auto: none
+      ddl-auto: validate
   application:
     name: transaction-service
 
