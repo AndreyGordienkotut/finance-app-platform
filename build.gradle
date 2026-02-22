@@ -57,8 +57,6 @@ subprojects {
         //redis
         implementation 'org.springframework.boot:spring-boot-starter-data-redis'
         implementation 'org.springframework.boot:spring-boot-starter-cache'
-        //liquibase
-        implementation 'org.liquibase:liquibase-core'
         // MapStruct
         implementation 'org.mapstruct:mapstruct:1.5.5.Final'
         annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'

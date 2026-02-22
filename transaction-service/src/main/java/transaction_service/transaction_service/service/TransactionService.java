@@ -39,7 +39,6 @@ public class TransactionService {
 
     private final TransactionMapper transactionMapper;
 
-    @Transactional
     @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
     public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
@@ -60,7 +59,6 @@ public class TransactionService {
                 userId,dto.getCategoryId()
         );
     }
-    @Transactional
     @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
     public TransactionResponseDto deposit(DepositRequestDto dto, String idempotencyKey, Long userId) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
@@ -84,7 +82,6 @@ public class TransactionService {
                 userId,null
         );
     }
-    @Transactional
     @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
     public TransactionResponseDto withdraw(WithdrawRequestDto dto, Long userId, String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
