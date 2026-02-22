@@ -59,6 +59,11 @@ subprojects {
         implementation 'org.springframework.boot:spring-boot-starter-cache'
         //liquibase
         implementation 'org.liquibase:liquibase-core'
+        // MapStruct
+        implementation 'org.mapstruct:mapstruct:1.5.5.Final'
+        annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
+        // Binding для работы Lombok + MapStruct вместе
+        annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
     }
 
     dependencyManagement {

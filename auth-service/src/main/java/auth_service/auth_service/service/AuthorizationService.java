@@ -4,6 +4,7 @@ import auth_service.auth_service.dto.AuthenticationRequestDto;
 import auth_service.auth_service.dto.AuthenticationResponseDto;
 import auth_service.auth_service.dto.RefreshTokenRequestDto;
 import auth_service.auth_service.dto.RegisterRequestDto;
+import auth_service.auth_service.mapper.AuthMapper;
 import core.core.config.JwtClaims;
 import core.core.exception.*;
 import auth_service.auth_service.model.EmailVerification;
@@ -36,6 +37,8 @@ public class AuthorizationService {
     private final AuthenticationManager authenticationManager;
     private final EmailVerificationTokensRepository emailVerificationTokensRepository;
     private final RefreshTokenService refreshTokenService;
+
+    private final AuthMapper authMapper;
     @Transactional
     public AuthenticationResponseDto register(RegisterRequestDto registerRequestDto) {
         if(userRepository.findByEmail(registerRequestDto.getEmail()).isPresent()) {
@@ -60,7 +63,7 @@ public class AuthorizationService {
         String jwtAccessToken = jwtService.generateToken(user, user.getId());
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(savedUser.getId());
 
-        return createAuthResponse(savedUser, jwtAccessToken, refreshToken.getToken());
+        return authMapper.toAuthResponse(savedUser, jwtAccessToken, refreshToken.getToken());
     }
     @Transactional
     public AuthenticationResponseDto authenticate(AuthenticationRequestDto authenticationRequestDto) {
@@ -84,7 +87,7 @@ public class AuthorizationService {
         String jwtAccessToken = jwtService.generateToken(user, user.getId());
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getId());
 
-        return createAuthResponse(user, jwtAccessToken, refreshToken.getToken());
+        return authMapper.toAuthResponse(user, jwtAccessToken, refreshToken.getToken());
     }
     @Transactional
     public AuthenticationResponseDto refreshToken(RefreshTokenRequestDto request) {
@@ -96,7 +99,7 @@ public class AuthorizationService {
         Users user = refreshToken.getUser();
         String newAccessToken = jwtService.generateToken(user, user.getId());
 
-        return createAuthResponse(user, newAccessToken, refreshToken.getToken());
+        return authMapper.toAuthResponse(user, newAccessToken, refreshToken.getToken());
     }
     @Transactional
     public void logout(String refreshToken) {
@@ -104,15 +107,15 @@ public class AuthorizationService {
                 .ifPresent(refreshTokenService::delete);
     }
 
-    private AuthenticationResponseDto createAuthResponse(Users user, String accessToken, String refreshToken) {
-        return AuthenticationResponseDto.builder()
-                .token(accessToken)
-                .refreshToken(refreshToken)
-                .userId(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .build();
-    }
+//    private AuthenticationResponseDto createAuthResponse(Users user, String accessToken, String refreshToken) {
+//        return AuthenticationResponseDto.builder()
+//                .token(accessToken)
+//                .refreshToken(refreshToken)
+//                .userId(user.getId())
+//                .username(user.getUsername())
+//                .email(user.getEmail())
+//                .build();
+//    }
 
 
 

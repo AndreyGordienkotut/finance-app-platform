@@ -16,6 +16,7 @@ import transaction_service.transaction_service.dto.WithdrawRequestDto;
 import transaction_service.transaction_service.config.AccountClient;
 import transaction_service.transaction_service.dto.TransactionRequestDto;
 import transaction_service.transaction_service.dto.TransactionResponseDto;
+import transaction_service.transaction_service.mapper.TransactionMapper;
 import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
 import org.springframework.data.domain.Page;
@@ -35,6 +36,8 @@ public class TransactionService {
     private final AccountClient accountClient;
     private final ExchangeRateService exchangeRateService;
     private final CategoryService categoryService;
+
+    private final TransactionMapper transactionMapper;
 
     @Transactional
     @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
@@ -112,7 +115,7 @@ public class TransactionService {
         Page<Transaction> transactions = transactionRepository
                 .findBySourceAccountIdOrTargetAccountId(accountId, accountId, pageable);
 
-        return transactions.map(this::convertToDto);
+        return transactions.map(transactionMapper::toDto);
     }
     private TransactionResponseDto processTransaction(
             Long sourceAccountId, Long targetAccountId, BigDecimal amount,
@@ -123,7 +126,7 @@ public class TransactionService {
         Optional<Transaction> existingTx = transactionRepository.findByIdempotencyKey(idempotencyKey);
         if (existingTx.isPresent()) {
             Transaction tx = existingTx.get();
-            TransactionResponseDto txDto = convertToDto(tx);
+            TransactionResponseDto txDto = transactionMapper.toDto(tx);
             if (tx.getStatus() == Status.CREATED || tx.getStatus() == Status.PROCESSING) {
                 throw new ConflictException("Transaction is already pending with this key and is being processed.", txDto);
             }
@@ -136,7 +139,7 @@ public class TransactionService {
             log.warn("Idempotency Key Conflict: Another process saved the transaction first. Key: {}", idempotencyKey);
             Transaction conflictTx = transactionRepository.findByIdempotencyKey(idempotencyKey)
                     .orElseThrow(() -> new InternalServerErrorException("Internal conflict handling error."));
-            return convertToDto(conflictTx);
+            return transactionMapper.toDto(conflictTx);
         }
         int maxAttempts = 3;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -149,7 +152,7 @@ public class TransactionService {
 
                 executeFinancialOperations(currentTx, type, sourceAccountId, targetAccountId, amount);
                 updateStatus(currentTx.getId(), Status.COMPLETED, null);
-                return convertToDto(transactionRepository.findById(currentTx.getId()).orElseThrow());
+                return transactionMapper.toDto(transactionRepository.findById(currentTx.getId()).orElseThrow());
 
             } catch (ConflictException e) {
                 if (!(e.getCause() instanceof org.springframework.dao.PessimisticLockingFailureException)) {
@@ -340,22 +343,22 @@ public class TransactionService {
         }
     }
 
-    private TransactionResponseDto convertToDto(Transaction transaction) {
-        return new TransactionResponseDto(
-                transaction.getId(),
-                transaction.getSourceAccountId(),
-                transaction.getTargetAccountId(),
-                transaction.getAmount(),
-                transaction.getTargetAmount(),
-                transaction.getExchangeRate(),
-                transaction.getCurrency(),
-                transaction.getStatus(),
-                transaction.getCreatedAt(),
-                transaction.getErrorMessage(),
-                transaction.getUpdatedAt(),
-                transaction.getTransactionType(),
-                transaction.getCategory()
-        );
-    }
+//    private TransactionResponseDto convertToDto(Transaction transaction) {
+//        return new TransactionResponseDto(
+//                transaction.getId(),
+//                transaction.getSourceAccountId(),
+//                transaction.getTargetAccountId(),
+//                transaction.getAmount(),
+//                transaction.getTargetAmount(),
+//                transaction.getExchangeRate(),
+//                transaction.getCurrency(),
+//                transaction.getStatus(),
+//                transaction.getCreatedAt(),
+//                transaction.getErrorMessage(),
+//                transaction.getUpdatedAt(),
+//                transaction.getTransactionType(),
+//                transaction.getCategory()
+//        );
+//    }
 
 }

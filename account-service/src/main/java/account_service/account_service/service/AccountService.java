@@ -1,6 +1,7 @@
 package account_service.account_service.service;
 
 import account_service.account_service.dto.AccountRequestDto;
+import account_service.account_service.mapper.AccountMapper;
 import account_service.account_service.model.AppliedTransactions;
 import account_service.account_service.repository.AppliedTransactionRepository;
 import core.core.dto.AccountResponseDto;
@@ -25,6 +26,8 @@ import java.time.LocalDateTime;
 public class AccountService {
     private final AccountRepository accountRepository;
     private final AppliedTransactionRepository appliedTransactionRepository;
+
+    private final AccountMapper accountMapper;
     @Transactional
     public AccountResponseDto createAccount(AccountRequestDto accountRequestDto, Long userId) {
         long count = accountRepository.countByUserIdAndStatusAccount(userId, StatusAccount.ACTIVE);
@@ -41,11 +44,11 @@ public class AccountService {
                 .createAt(LocalDateTime.now())
                 .build();
         accountRepository.save(account);
-        return convertToDto(account);
+        return accountMapper.toDto(account);
     }
     public Page<AccountResponseDto> getAllAccounts(Long userId,Pageable pageable) {
         Page<Account> accounts = accountRepository.findAllByUserIdAndStatusAccountNotOrderByCreateAtAsc(userId, StatusAccount.CLOSED, pageable);
-        return accounts.map(this::convertToDto);
+        return accounts.map(accountMapper::toDto);
 
     }
 
@@ -61,7 +64,7 @@ public class AccountService {
         }
         account.setStatusAccount(StatusAccount.CLOSED);
         accountRepository.save(account);
-        return convertToDto(account);
+        return accountMapper.toDto(account);
     }
 
     //accountClient
@@ -150,14 +153,14 @@ public class AccountService {
     }
 
 
-    private AccountResponseDto convertToDto(Account account) {
-        return new AccountResponseDto(
-                account.getId(),
-                account.getUserId(),
-                account.getCurrency(),
-                account.getBalance(),
-                account.getStatusAccount(),
-                account.getCreateAt()
-        );
-    }
+//    private AccountResponseDto convertToDto(Account account) {
+//        return new AccountResponseDto(
+//                account.getId(),
+//                account.getUserId(),
+//                account.getCurrency(),
+//                account.getBalance(),
+//                account.getStatusAccount(),
+//                account.getCreateAt()
+//        );
+//    }
 }
