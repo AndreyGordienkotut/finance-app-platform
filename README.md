@@ -89,6 +89,7 @@ Exchange Rate Service
 - Lombok
 - JUnit 5
 - Mockito
+- Liquibase
 
 Додаткова інформація
 - Проєкт орієнтований на продакшн-підхід
