@@ -7,7 +7,9 @@ import core.core.exception.*;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +18,7 @@ import transaction_service.transaction_service.dto.WithdrawRequestDto;
 import transaction_service.transaction_service.config.AccountClient;
 import transaction_service.transaction_service.dto.TransactionRequestDto;
 import transaction_service.transaction_service.dto.TransactionResponseDto;
+import transaction_service.transaction_service.event.TransactionCompletedEvent;
 import transaction_service.transaction_service.mapper.TransactionMapper;
 import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
@@ -38,8 +41,8 @@ public class TransactionService {
     private final CategoryService categoryService;
 
     private final TransactionMapper transactionMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
-    @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
     public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
            throw new BadRequestException("Idempotency-Key header is required.");
@@ -48,6 +51,8 @@ public class TransactionService {
         AccountResponseDto from = validateAccountOwnership(dto.getSourceAccountId(), userId);
         AccountResponseDto to = accountClient.getAccountById(dto.getTargetAccountId());
         validateAccounts(from, to, dto, userId);
+
+        eventPublisher.publishEvent(new TransactionCompletedEvent(userId));
 
         return processTransaction(
             from.getId(),
@@ -59,7 +64,7 @@ public class TransactionService {
                 userId,dto.getCategoryId()
         );
     }
-    @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
+
     public TransactionResponseDto deposit(DepositRequestDto dto, String idempotencyKey, Long userId) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new BadRequestException("Idempotency-Key header is required.");
@@ -71,7 +76,7 @@ public class TransactionService {
         if (targetAccount.getStatus() == StatusAccount.CLOSED) {
             throw new BadRequestException("Target account is closed.");
         }
-
+        eventPublisher.publishEvent(new TransactionCompletedEvent(userId));
         return processTransaction(
                 null,
                 targetAccount.getId(),
@@ -82,7 +87,7 @@ public class TransactionService {
                 userId,null
         );
     }
-    @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
+
     public TransactionResponseDto withdraw(WithdrawRequestDto dto, Long userId, String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new BadRequestException("Idempotency-Key header is required.");
@@ -91,7 +96,7 @@ public class TransactionService {
         AccountResponseDto sourceAccount = validateAccountOwnership(dto.getSourceAccountId(), userId);
 
         validateWithdraw(sourceAccount, dto, userId);
-
+        eventPublisher.publishEvent(new TransactionCompletedEvent(userId));
         return processTransaction(
                 sourceAccount.getId(),
                 null,
@@ -315,7 +320,6 @@ public class TransactionService {
         }
         return account;
     }
-    @CacheEvict(value = {"totalSpent", "topCategories", "timeline"}, allEntries = true)
     @Transactional
     public void updateStatus(Long id, Status status, String error) {
         Transaction tx = transactionRepository.findById(id)
@@ -324,8 +328,9 @@ public class TransactionService {
         tx.setStatus(status);
         tx.setErrorMessage(error);
         tx.setUpdatedAt(LocalDateTime.now());
-        transactionRepository.save(tx);
 
+        transactionRepository.save(tx);
+        eventPublisher.publishEvent(new TransactionCompletedEvent(tx.getUserId()));
 
     }
 
@@ -339,23 +344,5 @@ public class TransactionService {
             throw new RuntimeException("Compensation failed", e);
         }
     }
-
-//    private TransactionResponseDto convertToDto(Transaction transaction) {
-//        return new TransactionResponseDto(
-//                transaction.getId(),
-//                transaction.getSourceAccountId(),
-//                transaction.getTargetAccountId(),
-//                transaction.getAmount(),
-//                transaction.getTargetAmount(),
-//                transaction.getExchangeRate(),
-//                transaction.getCurrency(),
-//                transaction.getStatus(),
-//                transaction.getCreatedAt(),
-//                transaction.getErrorMessage(),
-//                transaction.getUpdatedAt(),
-//                transaction.getTransactionType(),
-//                transaction.getCategory()
-//        );
-//    }
 
 }
