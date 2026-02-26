@@ -7,11 +7,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
+import transaction_service.transaction_service.service.strategy.FinancialOperationStrategy;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -22,9 +26,11 @@ class TransactionRecoveryServiceTest {
     private TransactionRepository transactionRepository;
     @Mock
     private TransactionService transactionService;
-
+    @Mock
+    private FinancialOperationStrategy transferStrategy;
     @InjectMocks
     private TransactionRecoveryService recoveryService;
+    private Map<TransactionType, FinancialOperationStrategy> strategies;
 
     private Transaction stuckTx;
 
@@ -40,6 +46,8 @@ class TransactionRecoveryServiceTest {
                 .step(TransactionStep.DEBIT_DONE)
                 .updatedAt(LocalDateTime.now().minusMinutes(10))
                 .build();
+        strategies = Map.of(TransactionType.TRANSFER, transferStrategy);
+        ReflectionTestUtils.setField(recoveryService, "strategies", strategies);
     }
 
     @Test
@@ -50,7 +58,7 @@ class TransactionRecoveryServiceTest {
 
         recoveryService.recoverStuckTransactions();
 
-        verify(transactionService, never()).executeFinancialOperations(any(), any(), any(), any(), any());
+        verifyNoInteractions(transferStrategy);
         verify(transactionService, never()).updateStatus(anyLong(), any(), any());
     }
 
@@ -61,9 +69,8 @@ class TransactionRecoveryServiceTest {
                 .thenReturn(List.of(stuckTx));
 
         recoveryService.recoverStuckTransactions();
-        verify(transactionService).executeFinancialOperations(
+        verify(transferStrategy).execute(
                 eq(stuckTx),
-                eq(TransactionType.TRANSFER),
                 eq(1L),
                 eq(2L),
                 eq(new BigDecimal("100.00"))
@@ -79,7 +86,7 @@ class TransactionRecoveryServiceTest {
                 .thenReturn(List.of(stuckTx));
 
         doThrow(new RuntimeException("Network error"))
-                .when(transactionService).executeFinancialOperations(any(), any(), any(), any(), any());
+                .when(transferStrategy).execute(any(), any(), any(), any());
 
         recoveryService.recoverStuckTransactions();
 

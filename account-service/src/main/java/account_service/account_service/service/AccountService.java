@@ -97,7 +97,7 @@ public class AccountService {
                     .orElseThrow(() -> new BadRequestException("Account not found"));
         } catch (PessimisticLockingFailureException e) {
             log.warn("Locking failed for account {} during debit", accountId);
-            throw new ConflictException("Account is busy, retry later", e.getCause());
+            throw new ConflictException("Account is busy, retry later", e);
         }
 
         if (account.getStatusAccount() != StatusAccount.ACTIVE) {
@@ -134,7 +134,7 @@ public class AccountService {
                     .orElseThrow(() -> new BadRequestException("Account not found"));
         } catch (PessimisticLockingFailureException e) {
             log.warn("Locking failed for account {} during credit", accountId);
-            throw new ConflictException("Account is busy, retry later", e.getCause());
+            throw new ConflictException("Account is busy, retry later", e);
         }
 
         if (account.getStatusAccount() != StatusAccount.ACTIVE) {
@@ -151,16 +151,4 @@ public class AccountService {
                         .build()
         );
     }
-
-
-//    private AccountResponseDto convertToDto(Account account) {
-//        return new AccountResponseDto(
-//                account.getId(),
-//                account.getUserId(),
-//                account.getCurrency(),
-//                account.getBalance(),
-//                account.getStatusAccount(),
-//                account.getCreateAt()
-//        );
-//    }
 }

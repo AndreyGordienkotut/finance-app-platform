@@ -11,10 +11,12 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import transaction_service.transaction_service.service.ExchangeRateService;
 import transaction_service.transaction_service.service.TransactionService;
 
 import static org.mockito.ArgumentMatchers.*;
@@ -40,10 +42,13 @@ class TransactionIntegrationSecurityTest {
 
     @MockBean
     private TransactionService transactionService;
+    @MockBean
+    private ExchangeRateService exchangeRateService;
 
     @MockBean
     private UserDetailsService userDetailsService;
 
+    private static final String BASE_PATH = "/api/v1/transactions";
     private String generateRealToken(Long userId, List<String> roles) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
@@ -60,7 +65,7 @@ class TransactionIntegrationSecurityTest {
     @Test
     @DisplayName("GET /history Without JWT -> 403 Forbidden")
     void history_NoToken_ShouldReturn403() throws Exception {
-        mockMvc.perform(get("/api/transaction/history")
+        mockMvc.perform(get(BASE_PATH)
                         .param("accountId", "1"))
                 .andExpect(status().isForbidden());
     }
@@ -71,10 +76,10 @@ class TransactionIntegrationSecurityTest {
         Long mockUserId = 1L;
         String token = generateRealToken(mockUserId, List.of("ROLE_USER"));
 
-        when(transactionService.getHistory(anyLong(), any(), eq(mockUserId)))
+        when(transactionService.getHistory(eq(1L), any(Pageable.class), eq(mockUserId)))
                 .thenReturn(Page.empty());
 
-        mockMvc.perform(get("/api/transaction/history")
+        mockMvc.perform(get(BASE_PATH)
                         .header("Authorization", "Bearer " + token)
                         .param("accountId", "1")
                         .param("page", "0")
@@ -90,7 +95,7 @@ class TransactionIntegrationSecurityTest {
                 .signWith(Keys.hmacShaKeyFor("wrong-secret-length-must-be-very-long-and-secure-123".getBytes()))
                 .compact();
 
-        mockMvc.perform(get("/api/transaction/history")
+        mockMvc.perform(get(BASE_PATH)
                         .header("Authorization", "Bearer " + badToken)
                         .param("accountId", "1"))
                 .andExpect(status().isForbidden());
@@ -105,7 +110,7 @@ class TransactionIntegrationSecurityTest {
         when(transactionService.getHistory(eq(foreignAccountId), any(), eq(myUserId)))
                 .thenThrow(new AccessDeniedException("You do not own this account"));
 
-        mockMvc.perform(get("/api/transaction/history")
+        mockMvc.perform(get(BASE_PATH)
                         .header("Authorization", "Bearer " + token)
                         .param("accountId", foreignAccountId.toString())
                         .param("page", "0")

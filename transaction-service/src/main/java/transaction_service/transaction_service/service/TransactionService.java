@@ -5,12 +5,10 @@ import core.core.enums.Currency;
 import core.core.enums.StatusAccount;
 import core.core.exception.*;
 import feign.FeignException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import transaction_service.transaction_service.dto.DepositRequestDto;
@@ -24,15 +22,18 @@ import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import transaction_service.transaction_service.service.strategy.FinancialOperationStrategy;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final LimitService limitService;
@@ -42,17 +43,39 @@ public class TransactionService {
 
     private final TransactionMapper transactionMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private Map<TransactionType, FinancialOperationStrategy> strategies;
 
+    public TransactionService(
+            TransactionRepository transactionRepository,
+            LimitService limitService,
+            AccountClient accountClient,
+            ExchangeRateService exchangeRateService,
+            CategoryService categoryService,
+            TransactionMapper transactionMapper,
+            ApplicationEventPublisher eventPublisher,
+            List<FinancialOperationStrategy> strategyList
+    ) {
+        this.transactionRepository = transactionRepository;
+        this.limitService = limitService;
+        this.accountClient = accountClient;
+        this.exchangeRateService = exchangeRateService;
+        this.categoryService = categoryService;
+        this.transactionMapper = transactionMapper;
+        this.eventPublisher = eventPublisher;
+
+        this.strategies = strategyList.stream()
+                .collect(Collectors.toMap(
+                        FinancialOperationStrategy::getType,
+                        s -> s
+                ));
+    }
     public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-           throw new BadRequestException("Idempotency-Key header is required.");
-        }
 
+        validateIdempotency(idempotencyKey);
         AccountResponseDto from = validateAccountOwnership(dto.getSourceAccountId(), userId);
         AccountResponseDto to = accountClient.getAccountById(dto.getTargetAccountId());
         validateAccounts(from, to, dto, userId);
 
-        eventPublisher.publishEvent(new TransactionCompletedEvent(userId));
 
         return processTransaction(
             from.getId(),
@@ -66,9 +89,8 @@ public class TransactionService {
     }
 
     public TransactionResponseDto deposit(DepositRequestDto dto, String idempotencyKey, Long userId) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw new BadRequestException("Idempotency-Key header is required.");
-        }
+        validateIdempotency(idempotencyKey);
+
         AccountResponseDto targetAccount = validateAccountOwnership(dto.getTargetAccountId(), userId);
         if (!targetAccount.getUserId().equals(userId)) {
             throw new BadRequestException("Account does not belong to you");
@@ -76,7 +98,6 @@ public class TransactionService {
         if (targetAccount.getStatus() == StatusAccount.CLOSED) {
             throw new BadRequestException("Target account is closed.");
         }
-        eventPublisher.publishEvent(new TransactionCompletedEvent(userId));
         return processTransaction(
                 null,
                 targetAccount.getId(),
@@ -89,14 +110,11 @@ public class TransactionService {
     }
 
     public TransactionResponseDto withdraw(WithdrawRequestDto dto, Long userId, String idempotencyKey) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            throw new BadRequestException("Idempotency-Key header is required.");
-        }
+        validateIdempotency(idempotencyKey);
 
         AccountResponseDto sourceAccount = validateAccountOwnership(dto.getSourceAccountId(), userId);
 
         validateWithdraw(sourceAccount, dto, userId);
-        eventPublisher.publishEvent(new TransactionCompletedEvent(userId));
         return processTransaction(
                 sourceAccount.getId(),
                 null,
@@ -129,9 +147,6 @@ public class TransactionService {
         if (existingTx.isPresent()) {
             Transaction tx = existingTx.get();
             TransactionResponseDto txDto = transactionMapper.toDto(tx);
-            if (tx.getStatus() == Status.CREATED || tx.getStatus() == Status.PROCESSING) {
-                throw new ConflictException("Transaction is already pending with this key and is being processed.", txDto);
-            }
             return txDto;
         }
         Transaction tx;
@@ -152,12 +167,13 @@ public class TransactionService {
                 Transaction currentTx = transactionRepository.findById(tx.getId())
                         .orElseThrow(() -> new NotFoundException("Transaction not found"));
 
-                executeFinancialOperations(currentTx, type, sourceAccountId, targetAccountId, amount);
+                strategies.get(type)
+                        .execute(currentTx, sourceAccountId, targetAccountId, tx.getTargetAmount());
                 updateStatus(currentTx.getId(), Status.COMPLETED, null);
                 return transactionMapper.toDto(transactionRepository.findById(currentTx.getId()).orElseThrow());
 
             } catch (ConflictException e) {
-                if (!(e.getCause() instanceof org.springframework.dao.PessimisticLockingFailureException)) {
+                if (!(e.getCause() instanceof PessimisticLockingFailureException)) {
                     throw e;
                 }
 
@@ -186,16 +202,6 @@ public class TransactionService {
 
         throw new InternalServerErrorException("Transaction failed after all retries");
 
-    }
-     void executeFinancialOperations(Transaction tx, TransactionType type,
-                                            Long sourceAccountId, Long targetAccountId, BigDecimal amount) {
-        if (type == TransactionType.TRANSFER) {
-            executeSaga(tx, sourceAccountId, targetAccountId, amount);
-        } else if (type == TransactionType.DEPOSIT) {
-            executeCredit(tx.getId(), targetAccountId, amount);
-        } else if (type == TransactionType.WITHDRAW) {
-            executeDebit(tx.getId(), sourceAccountId, amount);
-        }
     }
 
     @Transactional
@@ -234,41 +240,6 @@ public class TransactionService {
         log.info("TX {} created (Type: {})", saved.getId(), type);
         return saved;
     }
-    private void executeSaga(Transaction tx, Long fromId, Long toId, BigDecimal amount) {
-        boolean debitSucceeded = tx.getStep() == TransactionStep.DEBIT_DONE;
-        try {
-            if (tx.getStep() == TransactionStep.NONE) {
-                log.info("TX {} SAGA: Debit {} from account {}", tx.getId(), amount, fromId);
-                executeDebit(tx.getId(), fromId, amount);
-                updateStep(tx.getId(), TransactionStep.DEBIT_DONE);
-                debitSucceeded = true;
-            }
-
-            if (tx.getStep() == TransactionStep.DEBIT_DONE) {
-                log.info("TX {} SAGA: Credit {} to account {}", tx.getId(), tx.getTargetAmount(), toId);
-                executeCredit(tx.getId(), toId, tx.getTargetAmount());
-                updateStep(tx.getId(), TransactionStep.CREDIT_DONE);
-            }
-        }
-        catch (ConflictException e) {
-            throw e;
-        }
-        catch (Exception  e) {
-            log.warn("TX {} remote call failed: {}", tx.getId(), e.getMessage());
-
-            if (debitSucceeded) {
-                log.warn("TX {} Credit failed, starting compensation (rollback)", tx.getId());
-                try {
-                    compensate(tx.getId(), fromId, amount);
-                } catch (RuntimeException re) {
-                    log.error("TX {} compensation FAILED: {}", tx.getId(), re.getMessage());
-                    updateStatus(tx.getId(), Status.FAILED, "Transfer failed. Compensation failed: " + re.getMessage());
-                    throw new BadRequestException("Transfer failed. Compensation failed.");
-                }
-            }
-            throw new BadRequestException("Transfer failed: " + e.getMessage());
-        }
-    }
     @Transactional
     public void updateStep(Long txId, TransactionStep step) {
         Transaction tx = transactionRepository.findById(txId)
@@ -278,12 +249,12 @@ public class TransactionService {
         transactionRepository.save(tx);
         log.info("TX {} step updated to {}", txId, step);
     }
-    private void executeDebit(Long txId, Long accountId, BigDecimal amount) {
+    public void executeDebit(Long txId, Long accountId, BigDecimal amount) {
         log.info("TX {} calling debit for account {}", txId, accountId);
         accountClient.debit(accountId, amount, txId);
     }
 
-    private void executeCredit(Long txId, Long accountId, BigDecimal amount) {
+    public void executeCredit(Long txId, Long accountId, BigDecimal amount) {
         log.info("TX {} calling credit for account {}", txId, accountId);
         accountClient.credit(accountId, amount, txId);
     }
@@ -313,6 +284,11 @@ public class TransactionService {
             throw new BadRequestException("Not enough money in source account for withdrawal.");
         }
     }
+    private void validateIdempotency(String key) {
+        if (key == null || key.isBlank()) {
+            throw new BadRequestException("Idempotency-Key header is required.");
+        }
+    }
     private AccountResponseDto validateAccountOwnership(Long accountId, Long userId) {
         AccountResponseDto account = accountClient.getAccountById(accountId);
         if (!account.getUserId().equals(userId)) {
@@ -330,7 +306,9 @@ public class TransactionService {
         tx.setUpdatedAt(LocalDateTime.now());
 
         transactionRepository.save(tx);
-        eventPublisher.publishEvent(new TransactionCompletedEvent(tx.getUserId()));
+        if (status == Status.COMPLETED || status == Status.FAILED) {
+            eventPublisher.publishEvent(new TransactionCompletedEvent(tx.getUserId()));
+        }
 
     }
 
