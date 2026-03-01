@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+
+  db:
+    image: mysql:8.0
+    container_name: mysql_db
+    restart: always
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  redis:
+    image: redis:7.2
+    container_name: redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - backend
+
+  eureka-service:
+    build:
+      context: .
+      dockerfile: ./eureka-service/Dockerfile
+    container_name: eureka-service
+    ports:
+      - "8761:8761"
+    networks:
+      - backend
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: ./auth-service/Dockerfile
+    container_name: auth-service
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      eureka-service:
+        condition: service_started
+      redis:
+        condition: service_started
+    networks:
+      - backend
+  account-service:
+    build:
+      context: .
+      dockerfile: ./account-service/Dockerfile
+    container_name: account-service
+    ports:
+      - "8081:8081"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      eureka-service:
+        condition: service_started
+      redis:
+        condition: service_started
+    networks:
+      - backend
+  transaction-service:
+    build:
+      context: .
+      dockerfile: ./transaction-service/Dockerfile
+    container_name: transaction-service
+    ports:
+      - "8082:8082"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      eureka-service:
+        condition: service_started
+      redis:
+        condition: service_started
+    networks:
+      - backend
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  mysql_data:

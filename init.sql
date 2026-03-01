@@ -1,0 +1,3 @@
+CREATE DATABASE IF NOT EXISTS auth_service;
+CREATE DATABASE IF NOT EXISTS account_service;
+CREATE DATABASE IF NOT EXISTS transaction_service;

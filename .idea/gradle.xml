@@ -12,7 +12,7 @@
             <option value="$PROJECT_DIR$/account-service" />
             <option value="$PROJECT_DIR$/auth-service" />
             <option value="$PROJECT_DIR$/core" />
-            <option value="$PROJECT_DIR$/eureka_service" />
+            <option value="$PROJECT_DIR$/eureka-service" />
             <option value="$PROJECT_DIR$/transaction-service" />
           </set>
         </option>

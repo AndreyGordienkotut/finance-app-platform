@@ -20,13 +20,13 @@ spring:
   data:
     redis:
       port: 6379
-      host: localhost
+      host: redis
   cache:
     type: redis
 eureka:
   client:
     service-url:
-      defaultZone: http://eureka-server:8761/eureka/
+      defaultZone: http://eureka-service:8761/eureka/
   instance:
     hostname: transaction-service
 application:

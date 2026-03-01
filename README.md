@@ -90,6 +90,7 @@ Exchange Rate Service
 - JUnit 5
 - Mockito
 - Liquibase
+- Docker
 
 Додаткова інформація
 - Проєкт орієнтований на продакшн-підхід
