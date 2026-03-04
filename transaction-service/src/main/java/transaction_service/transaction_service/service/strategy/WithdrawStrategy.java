@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import transaction_service.transaction_service.model.Transaction;
 import transaction_service.transaction_service.model.TransactionType;
-import transaction_service.transaction_service.service.TransactionService;
+import transaction_service.transaction_service.service.AccountOperationService;
 
 import java.math.BigDecimal;
 
@@ -12,7 +12,7 @@ import java.math.BigDecimal;
 @RequiredArgsConstructor
 public class WithdrawStrategy implements FinancialOperationStrategy {
 
-    private final TransactionService transactionService;
+    private final AccountOperationService accountOperationService;
 
     @Override
     public TransactionType getType() {
@@ -25,6 +25,6 @@ public class WithdrawStrategy implements FinancialOperationStrategy {
                         Long targetAccountId,
                         BigDecimal amount) {
 
-        transactionService.executeDebit(tx.getId(), sourceAccountId, amount);
+        accountOperationService.debit(tx.getId(), sourceAccountId, amount);
     }
 }

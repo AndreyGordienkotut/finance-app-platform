@@ -8,8 +8,10 @@ import transaction_service.transaction_service.model.Status;
 import transaction_service.transaction_service.model.Transaction;
 import transaction_service.transaction_service.model.TransactionStep;
 import transaction_service.transaction_service.model.TransactionType;
-import transaction_service.transaction_service.service.TransactionService;
+import transaction_service.transaction_service.service.AccountOperationService;
 import core.core.exception.*;
+import transaction_service.transaction_service.service.TransactionStateService;
+
 import java.math.BigDecimal;
 
 @Component
@@ -17,7 +19,8 @@ import java.math.BigDecimal;
 @Slf4j
 public class TransferStrategy implements FinancialOperationStrategy {
 
-    private final TransactionService transactionService;
+    private final AccountOperationService accountOperationService;
+    private final TransactionStateService transactionStateService;
 
     @Override
     public TransactionType getType() {
@@ -37,8 +40,8 @@ public class TransferStrategy implements FinancialOperationStrategy {
             if (tx.getStep() == TransactionStep.NONE) {
                 log.info("TX {} SAGA: Debit {}", tx.getId(), amount);
 
-                transactionService.executeDebit(tx.getId(), sourceAccountId, amount);
-                transactionService.updateStep(tx.getId(), TransactionStep.DEBIT_DONE);
+                accountOperationService.debit(tx.getId(), sourceAccountId, amount);
+                transactionStateService.updateStep(tx.getId(), TransactionStep.DEBIT_DONE);
                 tx.setStep(TransactionStep.DEBIT_DONE);
                 debitSucceeded = true;
             }
@@ -46,8 +49,8 @@ public class TransferStrategy implements FinancialOperationStrategy {
             if (tx.getStep() == TransactionStep.DEBIT_DONE) {
                 log.info("TX {} SAGA: Credit {}", tx.getId(), tx.getTargetAmount());
 
-                transactionService.executeCredit(tx.getId(), targetAccountId, tx.getTargetAmount());
-                transactionService.updateStep(tx.getId(), TransactionStep.CREDIT_DONE);
+                accountOperationService.credit(tx.getId(), targetAccountId, tx.getTargetAmount());
+                transactionStateService.updateStep(tx.getId(), TransactionStep.CREDIT_DONE);
             }
 
         } catch (ConflictException e) {
@@ -56,9 +59,9 @@ public class TransferStrategy implements FinancialOperationStrategy {
 
             if (debitSucceeded) {
                 try {
-                    transactionService.compensate(tx.getId(), sourceAccountId, amount);
+                    accountOperationService.compensate(tx.getId(), sourceAccountId, amount);
                 } catch (RuntimeException re) {
-                    transactionService.updateStatus(
+                    transactionStateService.updateStatus(
                             tx.getId(),
                             Status.FAILED,
                             "Compensation failed: " + re.getMessage()

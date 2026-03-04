@@ -10,9 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
-import transaction_service.transaction_service.config.AccountClient;
 import transaction_service.transaction_service.dto.DepositRequestDto;
 import transaction_service.transaction_service.dto.TransactionRequestDto;
 import core.core.exception.*;
@@ -22,6 +20,8 @@ import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
 import transaction_service.transaction_service.service.strategy.FinancialOperationStrategy;
 import org.springframework.dao.PessimisticLockingFailureException;
+import transaction_service.transaction_service.service.validate.AccountAccessService;
+import transaction_service.transaction_service.service.validate.TransactionValidationService;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -39,23 +39,25 @@ public class TransactionServiceTest {
     @Mock
     private TransactionRepository transactionRepository;
     @Mock
-    private AccountClient accountClient;
-    @Mock
-    private LimitService limitService;
-    @Mock
-    private ExchangeRateService exchangeRateService;
-    @Mock
     private CategoryService categoryService;
+    @Mock
+    private TransactionMapper transactionMapper;
+    @Mock
+    private TransactionStateService transactionStateService;
+    @Mock
+    TransactionValidationService transactionValidationService;
+    @Mock
+    private AccountAccessService accountAccessService;
+    @Mock
+    private AccountOperationService accountOperationService;
+    @Mock
+    private TransactionCreationService transactionCreationService;
     @Mock
     private FinancialOperationStrategy transferStrategy;
     @Mock
     private FinancialOperationStrategy depositStrategy;
     @Mock
     private FinancialOperationStrategy withdrawStrategy;
-    @Mock
-    private  TransactionMapper transactionMapper;
-    @Mock
-    private  ApplicationEventPublisher eventPublisher;
 
 
     private TransactionService transactionService;
@@ -70,6 +72,7 @@ public class TransactionServiceTest {
     private Transaction txCreated;
     private Transaction txInProgress;
     private AtomicReference<Transaction> storedTx;
+
     @BeforeEach
     void setUp() {
         when(transferStrategy.getType()).thenReturn(TransactionType.TRANSFER);
@@ -81,13 +84,14 @@ public class TransactionServiceTest {
 
         transactionService = new TransactionService(
                 transactionRepository,
-                limitService,
-                accountClient,
-                exchangeRateService,
                 categoryService,
                 transactionMapper,
-                eventPublisher,
-                strategyList
+                transactionStateService,
+                strategyList,
+                transactionValidationService,
+                accountAccessService,
+                accountOperationService,
+                transactionCreationService
         );
 
         transferDto = TransactionRequestDto.builder()
@@ -119,6 +123,7 @@ public class TransactionServiceTest {
                 .sourceAccountId(1L)
                 .targetAccountId(2L)
                 .amount(BigDecimal.valueOf(100))
+                .targetAmount(BigDecimal.valueOf(100))
                 .currency(Currency.USD)
                 .status(Status.CREATED)
                 .transactionType(TransactionType.TRANSFER)
@@ -146,101 +151,61 @@ public class TransactionServiceTest {
     @Test
     @DisplayName("Succeed transfer (same currency)")
     void transfer_succeed_sameCurrency() {
-        BigDecimal amount = new BigDecimal("100");
-        AtomicReference<Transaction> savedTx = new AtomicReference<>();
 
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction tx = invocation.getArgument(0);
-                    tx.setId(TX_ID);
-                    savedTx.set(tx);
-                    return tx;
-                });
+
+        when(transactionCreationService.createTransaction(
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(txCreated);
+
         when(transactionRepository.findById(TX_ID))
-                .thenAnswer(invocation -> Optional.of(savedTx.get()));
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-        when(transactionMapper.toDto(any(Transaction.class)))
-                .thenReturn(new TransactionResponseDto());
-        TransactionResponseDto result =
-                transactionService.transfer(transferDto, userId, idempotencyKey);
-        assertNotNull(result);
+                .thenReturn(Optional.of(txCreated));
 
-        verify(transferStrategy).execute(
-                any(Transaction.class),
-                eq(1L),
-                eq(2L),
-                eq(BigDecimal.valueOf(100))
-        );
-    }
-    @Test
-    @DisplayName("Transfer with currency conversion → strategy invoked")
-    void transfer_succeed_withCurrencyConversion() {
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
 
-        BigDecimal rate = new BigDecimal("0.9");
-        BigDecimal converted = new BigDecimal("90.0");
-
-        fromAccount.setCurrency(Currency.USD);
-        toAccount.setCurrency(Currency.EUR);
-
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-
-        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
-                .thenReturn(Optional.empty());
-
-        AtomicReference<Transaction> savedTx = new AtomicReference<>();
-
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction tx = invocation.getArgument(0);
-                    tx.setId(TX_ID);
-                    savedTx.set(tx);
-                    return tx;
-                });
-
-        when(transactionRepository.findById(anyLong()))
-                .thenAnswer(invocation -> Optional.of(savedTx.get()));
-
-        when(exchangeRateService.getRate(Currency.USD, Currency.EUR))
-                .thenReturn(rate);
-
-        when(exchangeRateService.convert(BigDecimal.valueOf(100), rate))
-                .thenReturn(converted);
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
 
         when(transactionMapper.toDto(any()))
                 .thenReturn(new TransactionResponseDto());
 
-        transactionService.transfer(transferDto, userId, idempotencyKey);
+        TransactionResponseDto result =
+                transactionService.transfer(transferDto, userId, idempotencyKey);
 
-        verify(exchangeRateService).getRate(Currency.USD, Currency.EUR);
-        verify(exchangeRateService).convert(BigDecimal.valueOf(100), rate);
+        assertNotNull(result);
 
         verify(transferStrategy).execute(
-                any(Transaction.class),
+                eq(txCreated),
                 eq(1L),
                 eq(2L),
-                eq(converted)
+                eq(BigDecimal.valueOf(100))
         );
+
+        verify(transactionStateService)
+                .updateStatus(TX_ID, Status.COMPLETED, null);
     }
 
     @Test
     @DisplayName("SAGA: Debit failed -> FAILED status strategy")
     void testDebitFails_Strategy() {
 
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
 
         AtomicReference<Transaction> savedTx = new AtomicReference<>(txCreated);
 
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
 
-        when(transactionRepository.save(any(Transaction.class)))
+        when(transactionCreationService.createTransaction(
+                any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> {
-                    Transaction tx = invocation.getArgument(0);
+                    Transaction tx = txCreated;
                     tx.setId(TX_ID);
                     savedTx.set(tx);
                     return tx;
@@ -258,71 +223,80 @@ public class TransactionServiceTest {
 
         verify(transferStrategy)
                 .execute(any(Transaction.class), eq(1L), eq(2L), any());
-
-        assertEquals(Status.FAILED, savedTx.get().getStatus());
+        verify(transactionStateService)
+                .updateStatus(TX_ID, Status.FAILED, "Debit failed");
     }
+
     @Test
     @DisplayName("Deposit success")
-    void testDepositSuccess_Strategy() {
-
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-
-        AtomicReference<Transaction> savedTx = new AtomicReference<>(txCreated);
-
+    void deposit_success() {
         DepositRequestDto depositDto =
                 new DepositRequestDto(1L, new BigDecimal("500"), 1L);
+
+        Transaction depositTx = Transaction.builder()
+                .id(TX_ID)
+                .sourceAccountId(null)
+                .targetAccountId(1L)
+                .amount(new BigDecimal("500"))
+                .targetAmount(new BigDecimal("500"))
+                .currency(Currency.USD)
+                .status(Status.CREATED)
+                .transactionType(TransactionType.DEPOSIT)
+                .step(TransactionStep.NONE)
+                .idempotencyKey(idempotencyKey)
+                .build();
 
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
 
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction tx = invocation.getArgument(0);
-                    tx.setId(TX_ID);
-                    savedTx.set(tx);
-                    return tx;
-                });
+        when(transactionCreationService.createTransaction(
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(depositTx);
 
-        when(transactionRepository.findById(anyLong()))
-                .thenAnswer(invocation -> Optional.of(savedTx.get()));
+        when(transactionRepository.findById(TX_ID))
+                .thenReturn(Optional.of(depositTx));
 
-        doNothing().when(depositStrategy)
-                .execute(any(Transaction.class), eq(null), eq(1L), eq(new BigDecimal("500")));
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
 
-        when(transactionMapper.toDto(any())).thenReturn(new TransactionResponseDto());
+        when(transactionMapper.toDto(any()))
+                .thenReturn(new TransactionResponseDto());
 
         TransactionResponseDto result =
                 transactionService.deposit(depositDto, idempotencyKey, userId);
 
         assertNotNull(result);
 
-        verify(depositStrategy)
-                .execute(any(Transaction.class), eq(null), eq(1L), eq(new BigDecimal("500")));
+        verify(depositStrategy).execute(
+                eq(depositTx),
+                eq(null),
+                eq(1L),
+                eq(new BigDecimal("500"))
+        );
 
-        assertEquals(Status.COMPLETED, savedTx.get().getStatus());
+        verify(transactionStateService)
+                .updateStatus(TX_ID, Status.COMPLETED, null);
     }
+
     @Test
     @DisplayName("Strategy throws -> status FAILED")
-    void transfer_creditFailed_rollbackSucceed() {
-
-        AtomicReference<Transaction> savedTx = new AtomicReference<>();
-
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+    void transfer_strategyFails_statusFailed() {
 
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
 
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction tx = invocation.getArgument(0);
-                    tx.setId(TX_ID);
-                    savedTx.set(tx);
-                    return tx;
-                });
+        when(transactionCreationService.createTransaction(
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(txCreated);
 
-        when(transactionRepository.findById(anyLong()))
-                .thenAnswer(invocation -> Optional.of(savedTx.get()));
+        when(transactionRepository.findById(TX_ID))
+                .thenReturn(Optional.of(txCreated));
+
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
 
         doThrow(new RuntimeException("Credit failed"))
                 .when(transferStrategy)
@@ -331,68 +305,33 @@ public class TransactionServiceTest {
         assertThrows(InternalServerErrorException.class,
                 () -> transactionService.transfer(transferDto, userId, idempotencyKey));
 
-        verify(transferStrategy).execute(any(), any(), any(), any());
-
-        assertEquals(Status.FAILED, savedTx.get().getStatus());
+        verify(transactionStateService).updateStatus(
+                eq(TX_ID),
+                eq(Status.FAILED),
+                eq("Unexpected error: Credit failed")
+        );
     }
-    @Test
-    @DisplayName("Transfer credit failed -> FAILED status")
-    void transfer_creditFailed_rollbackHandled() {
 
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-
-        AtomicReference<Transaction> savedTx = new AtomicReference<>(txCreated);
-
-        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
-                .thenReturn(Optional.empty());
-
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction tx = invocation.getArgument(0);
-                    tx.setId(TX_ID);
-                    savedTx.set(tx);
-                    return tx;
-                });
-
-        when(transactionRepository.findById(anyLong()))
-                .thenAnswer(invocation -> Optional.of(savedTx.get()));
-
-        doThrow(new RuntimeException("Credit failed"))
-                .when(transferStrategy)
-                .execute(any(Transaction.class), eq(1L), eq(2L), eq(new BigDecimal("100")));
-
-        assertThrows(InternalServerErrorException.class,
-                () -> transactionService.transfer(transferDto, userId, idempotencyKey));
-
-        verify(transferStrategy)
-                .execute(any(Transaction.class), eq(1L), eq(2L), eq(new BigDecimal("100")));
-
-        assertEquals(Status.FAILED, savedTx.get().getStatus());
-    }
 
     @Test
     @DisplayName("Unexpected exception during SAGA -> FAILED + InternalServerErrorException")
     void testUnexpectedExceptionDuringSaga() {
 
-        AtomicReference<Transaction> savedTx = new AtomicReference<>();
-
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
 
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction tx = invocation.getArgument(0);
-                    tx.setId(TX_ID);
-                    savedTx.set(tx);
-                    return tx;
-                });
+        when(transactionCreationService.createTransaction(
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(txCreated);
 
-        when(transactionRepository.findById(anyLong()))
-                .thenAnswer(invocation -> Optional.of(savedTx.get()));
+        when(transactionRepository.findById(TX_ID))
+                .thenReturn(Optional.of(txCreated));
+
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
 
         doThrow(new RuntimeException("DB lost"))
                 .when(transferStrategy)
@@ -401,89 +340,103 @@ public class TransactionServiceTest {
         assertThrows(InternalServerErrorException.class,
                 () -> transactionService.transfer(transferDto, userId, idempotencyKey));
 
-        assertEquals(Status.FAILED, savedTx.get().getStatus());
+        verify(transactionStateService, atLeastOnce())
+                .updateStatus(eq(TX_ID), eq(Status.FAILED), contains("DB lost"));
     }
 
     @Test
     @DisplayName("Should throw LimitExceededException and stop process")
     void testLimitExceeded() {
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
-        doThrow(new LimitExceededException("Limit exceeded"))
-                .when(limitService).checkTransactionLimit(any(), any());
+        when(transactionCreationService.createTransaction(
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenThrow(new LimitExceededException("Limit exceeded"));
 
         assertThrows(LimitExceededException.class,
                 () -> transactionService.transfer(transferDto, userId, idempotencyKey));
 
         verify(transactionRepository, never()).save(any());
-        verifyNoInteractions(exchangeRateService);
+        verify(transferStrategy, never()).execute(any(), any(), any(), any());
     }
     @Test
     @DisplayName("Idempotency: Existing COMPLETED transaction")
     void testIdempotency_Completed() {
+
         txInProgress.setStatus(Status.COMPLETED);
         txInProgress.setStep(TransactionStep.CREDIT_DONE);
 
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-        when(transactionMapper.toDto(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction tx = invocation.getArgument(0);
-                    return TransactionResponseDto.builder()
-                            .id(tx.getId())
-                            .status(tx.getStatus())
-                            .amount(tx.getAmount())
-                            .build();
-                });
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
+
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.of(txInProgress));
 
-        TransactionResponseDto result = transactionService.transfer(transferDto, userId, idempotencyKey);
+        when(transactionMapper.toDto(txInProgress))
+                .thenReturn(TransactionResponseDto.builder()
+                        .id(txInProgress.getId())
+                        .status(Status.COMPLETED)
+                        .amount(txInProgress.getAmount())
+                        .build());
 
-        assertNotNull(result);
+        TransactionResponseDto result =
+                transactionService.transfer(transferDto, userId, idempotencyKey);
+
         assertEquals(Status.COMPLETED, result.getStatus());
 
-        verify(accountClient, times(1)).getAccountById(1L);
-        verify(accountClient, times(1)).getAccountById(2L);
-        verify(transactionRepository, never()).save(any());
+        verify(transferStrategy, never()).execute(any(), any(), any(), any());
+        verify(transactionCreationService, never())
+                .createTransaction(any(), any(), any(), any(), any(), any(), any(), any());
     }
     @Test
-    @DisplayName("Idempotency: Existing PROCESSING transaction -> Conflict")
+    @DisplayName("Idempotency: Existing PROCESSING transaction")
     void testIdempotency_Processing() {
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+
+        txInProgress.setStatus(Status.PROCESSING);
+
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
 
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.of(txInProgress));
-        when(transactionMapper.toDto(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction tx = invocation.getArgument(0);
-                    return TransactionResponseDto.builder()
-                            .id(tx.getId())
-                            .status(tx.getStatus())
-                            .amount(tx.getAmount())
-                            .build();
-                });
+
+        when(transactionMapper.toDto(txInProgress))
+                .thenReturn(TransactionResponseDto.builder()
+                        .id(txInProgress.getId())
+                        .status(Status.PROCESSING)
+                        .amount(txInProgress.getAmount())
+                        .build());
 
         TransactionResponseDto result =
                 transactionService.transfer(transferDto, userId, idempotencyKey);
 
         assertEquals(Status.PROCESSING, result.getStatus());
 
-
-        verify(accountClient, times(1)).getAccountById(1L);
-        verify(accountClient, times(1)).getAccountById(2L);
-        verify(transactionRepository, never()).save(any());
+        verify(transferStrategy, never()).execute(any(), any(), any(), any());
+        verify(transactionCreationService, never())
+                .createTransaction(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("Idempotency: Concurrent creation -> DataIntegrityViolation")
     void testIdempotency_ConcurrentCreation() {
 
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
         when(transactionMapper.toDto(any(Transaction.class)))
                 .thenAnswer(invocation -> {
                     Transaction tx = invocation.getArgument(0);
@@ -497,7 +450,8 @@ public class TransactionServiceTest {
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(txCreated));
 
-        when(transactionRepository.save(any(Transaction.class)))
+        when(transactionCreationService.createTransaction(
+                any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new DataIntegrityViolationException("Duplicate"));
 
         TransactionResponseDto result =
@@ -505,79 +459,28 @@ public class TransactionServiceTest {
 
         assertNotNull(result);
     }
-    @Test
-    @DisplayName("Validate: Foreign source account -> NotFound (via validateAccountOwnership)")
-    void testValidateForeignSourceAccount() {
-        when(accountClient.getAccountById(1L)).thenThrow(new NotFoundException("Account not found or access denied."));
 
-        assertThrows(NotFoundException.class,
-                () -> transactionService.transfer(transferDto, userId, idempotencyKey));
-
-        verify(accountClient, times(1)).getAccountById(1L);
-        verify(accountClient, never()).getAccountById(2L);
-        verify(transactionRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("Validate: Same account -> BadRequest")
-    void testValidateSameAccount() {
-        transferDto.setTargetAccountId(1L);
-
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-
-        assertThrows(BadRequestException.class,
-                () -> transactionService.transfer(transferDto, userId, idempotencyKey));
-    }
-
-    @Test
-    @DisplayName("Validate: Account closed -> BadRequest")
-    void testValidateAccountClosed() {
-        fromAccount.setStatus(StatusAccount.CLOSED);
-
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-
-        assertThrows(BadRequestException.class,
-                () -> transactionService.transfer(transferDto, userId, idempotencyKey));
-    }
-
-    @Test
-    @DisplayName("Validate: Not enough money -> BadRequest")
-    void testValidateNotEnoughMoney() {
-        fromAccount.setBalance(BigDecimal.valueOf(50));
-
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-
-        assertThrows(BadRequestException.class,
-                () -> transactionService.transfer(transferDto, userId, idempotencyKey));
-    }
     @Test
     @DisplayName("Retry: Success on second attempt")
     void testRetry_SucceedsOnSecondAttempt() {
-        when(accountClient.getAccountById(any())).thenReturn(fromAccount);
-        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction tx = invocation.getArgument(0);
-                    if (tx.getId() == null) {
-                        tx.setId(TX_ID);
-                    }
-                    storedTx.set(tx);
-                    return tx;
-                });
-        when(transactionMapper.toDto(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction tx = invocation.getArgument(0);
-                    return TransactionResponseDto.builder()
-                            .id(tx.getId())
-                            .amount(tx.getAmount())
-                            .status(tx.getStatus())
-                            .build();
-                });
+
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
+
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+
+        when(transactionCreationService.createTransaction(
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(txCreated);
+
         when(transactionRepository.findById(TX_ID))
-                .thenAnswer(invocation -> Optional.ofNullable(storedTx.get()));
-        var lockEx = new org.springframework.dao.PessimisticLockingFailureException("Locked");
+                .thenReturn(Optional.of(txCreated));
+
+        var lockEx = new PessimisticLockingFailureException("Locked");
         var conflictEx = new ConflictException("Busy", lockEx);
 
         doThrow(conflictEx)
@@ -585,9 +488,18 @@ public class TransactionServiceTest {
                 .when(transferStrategy)
                 .execute(any(), any(), any(), any());
 
-        TransactionResponseDto result = transactionService.transfer(transferDto, userId, idempotencyKey);
+        when(transactionMapper.toDto(any()))
+                .thenReturn(TransactionResponseDto.builder()
+                        .id(TX_ID)
+                        .status(Status.COMPLETED)
+                        .amount(BigDecimal.valueOf(100))
+                        .build());
+
+        TransactionResponseDto result =
+                transactionService.transfer(transferDto, userId, idempotencyKey);
 
         assertEquals(Status.COMPLETED, result.getStatus());
+
         verify(transferStrategy, times(2))
                 .execute(any(), any(), any(), any());
     }
@@ -595,14 +507,26 @@ public class TransactionServiceTest {
     @Test
     @DisplayName("Retry: Exhausted attempts should throw Conflict")
     void testRetry_ExhaustedAttempts() {
-        when(accountClient.getAccountById(any())).thenReturn(fromAccount);
-        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
-        when(transactionRepository.save(any(Transaction.class))).thenReturn(txInProgress);
-        when(transactionRepository.findById(TX_ID)).thenReturn(Optional.of(txInProgress));
 
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
+
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+
+        when(transactionCreationService.createTransaction(
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(txCreated);
+
+        when(transactionRepository.findById(TX_ID))
+                .thenReturn(Optional.of(txCreated));
 
         var lockEx = new PessimisticLockingFailureException("Locked");
         var conflictEx = new ConflictException("Busy", lockEx);
+
         doThrow(conflictEx)
                 .when(transferStrategy)
                 .execute(any(), any(), any(), any());
@@ -617,10 +541,22 @@ public class TransactionServiceTest {
     @Test
     @DisplayName("Retry: No retry on BadRequest")
     void testRetry_NoRetryOnBadRequest() {
-        when(accountClient.getAccountById(any())).thenReturn(fromAccount);
-        when(transactionRepository.findByIdempotencyKey(idempotencyKey)).thenReturn(Optional.empty());
-        when(transactionRepository.save(any(Transaction.class))).thenReturn(txInProgress);
-        when(transactionRepository.findById(TX_ID)).thenReturn(Optional.of(txInProgress));
+
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
+
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+
+        when(transactionCreationService.createTransaction(
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(txCreated);
+
+        when(transactionRepository.findById(TX_ID))
+                .thenReturn(Optional.of(txCreated));
 
         doThrow(new BadRequestException("Insufficient funds"))
                 .when(transferStrategy)
@@ -631,35 +567,5 @@ public class TransactionServiceTest {
 
         verify(transferStrategy, times(1))
                 .execute(any(), any(), any(), any());
-        verify(transactionRepository, times(3)).save(any(Transaction.class));
-    }
-    @Test
-    @DisplayName("Transfer: Success should call strategy")
-    void transfer_success_callsStrategy() {
-
-        AtomicReference<Transaction> storedTx = new AtomicReference<>();
-
-        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
-                .thenReturn(Optional.empty());
-
-        when(accountClient.getAccountById(1L)).thenReturn(fromAccount);
-        when(accountClient.getAccountById(2L)).thenReturn(toAccount);
-
-        when(transactionRepository.save(any(Transaction.class)))
-                .thenAnswer(invocation -> {
-                    Transaction tx = invocation.getArgument(0);
-                    if (tx.getId() == null) {
-                        tx.setId(TX_ID);
-                    }
-                    storedTx.set(tx);
-                    return tx;
-                });
-
-        when(transactionRepository.findById(TX_ID))
-                .thenAnswer(invocation -> Optional.ofNullable(storedTx.get()));
-
-        transactionService.transfer(transferDto, userId, idempotencyKey);
-
-        verify(transferStrategy).execute(any(), any(), any(), any());
     }
 }

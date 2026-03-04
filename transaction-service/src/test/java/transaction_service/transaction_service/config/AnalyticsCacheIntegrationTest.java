@@ -17,7 +17,7 @@ import transaction_service.transaction_service.dto.TotalSpentResponse;
 import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
 import transaction_service.transaction_service.service.AnalyticsService;
-import transaction_service.transaction_service.service.TransactionService;
+import transaction_service.transaction_service.service.TransactionStateService;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -50,7 +50,7 @@ class AnalyticsCacheIntegrationTest {
     TransactionRepository transactionRepository;
 
     @Autowired
-    TransactionService transactionService;
+    TransactionStateService transactionStateService;
 
     private Long userId = 1L;
 
@@ -87,7 +87,7 @@ class AnalyticsCacheIntegrationTest {
         Set<String> keys = redisTemplate.keys("*totalSpent*");
         assertThat(keys).isNotEmpty();
 
-        transactionService.updateStatus(tx.getId(), Status.FAILED, "Test fail");
+        transactionStateService.updateStatus(tx.getId(), Status.FAILED, "Test fail");
 
         keys = redisTemplate.keys("total:" + userId + ":*");
         assertThat(keys).isEmpty();

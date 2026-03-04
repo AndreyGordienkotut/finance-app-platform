@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class TransactionRecoveryService {
     private final TransactionRepository transactionRepository;
-    private final TransactionService transactionService;
+    private final TransactionStateService transactionStateService;
     private static final long PROCESSING_TIMEOUT_MINUTES = 5;
     private final Map<TransactionType, FinancialOperationStrategy> strategies;
     @Scheduled(fixedDelay = 5, timeUnit = TimeUnit.MINUTES)
@@ -51,13 +51,13 @@ public class TransactionRecoveryService {
                                 tx.getTargetAccountId(),
                                 tx.getAmount()
                         );
-                transactionService.updateStatus(tx.getId(), Status.COMPLETED, null);
+                transactionStateService.updateStatus(tx.getId(), Status.COMPLETED, null);
                 log.info("TX {} successfully recovered and set to COMPLETED.", tx.getId());
 
             } catch (Exception e) {
                 String errorMsg = "Recovery failed: " + e.getMessage();
                 log.error("TX {} final recovery FAILED. Marking FAILED. Error: {}", tx.getId(), errorMsg);
-                transactionService.updateStatus(tx.getId(), Status.FAILED, errorMsg);
+                transactionStateService.updateStatus(tx.getId(), Status.FAILED, errorMsg);
             }
         }
         log.info("Recovery process finished.");

@@ -57,7 +57,7 @@ public class LimitService {
 
         limit.setDailyLimit(daily);
         limit.setSingleLimit(single);
-
+        TransactionLimit saved = transactionLimitRepository.save(limit);
         return limitMapper.toDto(limit);
     }
 
@@ -66,6 +66,7 @@ public class LimitService {
         newLimit.setUserId(userId);
         newLimit.setDailyLimit(DEFAULT_DAILY_LIMIT);
         newLimit.setSingleLimit(DEFAULT_SINGLE_LIMIT);
+
         return transactionLimitRepository.save(newLimit);
     }
 

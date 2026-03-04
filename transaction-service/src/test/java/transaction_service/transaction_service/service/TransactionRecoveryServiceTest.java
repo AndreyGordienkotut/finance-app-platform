@@ -19,13 +19,14 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+
 @ExtendWith(MockitoExtension.class)
 class TransactionRecoveryServiceTest {
 
     @Mock
     private TransactionRepository transactionRepository;
     @Mock
-    private TransactionService transactionService;
+    private TransactionStateService transactionStateService;
     @Mock
     private FinancialOperationStrategy transferStrategy;
     @InjectMocks
@@ -59,7 +60,7 @@ class TransactionRecoveryServiceTest {
         recoveryService.recoverStuckTransactions();
 
         verifyNoInteractions(transferStrategy);
-        verify(transactionService, never()).updateStatus(anyLong(), any(), any());
+        verify(transactionStateService, never()).updateStatus(anyLong(), any(), any());
     }
 
     @Test
@@ -76,7 +77,7 @@ class TransactionRecoveryServiceTest {
                 eq(new BigDecimal("100.00"))
         );
 
-        verify(transactionService).updateStatus(eq(999L), eq(Status.COMPLETED), isNull());
+        verify(transactionStateService).updateStatus(eq(999L), eq(Status.COMPLETED), isNull());
     }
 
     @Test
@@ -90,7 +91,7 @@ class TransactionRecoveryServiceTest {
 
         recoveryService.recoverStuckTransactions();
 
-        verify(transactionService).updateStatus(
+        verify(transactionStateService).updateStatus(
                 eq(999L),
                 eq(Status.FAILED),
                 contains("Recovery failed: Network error")

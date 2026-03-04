@@ -9,7 +9,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import core.core.exception.*;
 import transaction_service.transaction_service.model.*;
-import transaction_service.transaction_service.service.TransactionService;
+import transaction_service.transaction_service.service.AccountOperationService;
+import transaction_service.transaction_service.service.TransactionStateService;
 
 import java.math.BigDecimal;
 
@@ -21,7 +22,9 @@ import static org.mockito.Mockito.*;
 class TransferStrategyTest {
 
     @Mock
-    private TransactionService transactionService;
+    private AccountOperationService accountOperationService;
+    @Mock
+    private TransactionStateService transactionStateService;
 
     @InjectMocks
     private TransferStrategy strategy;
@@ -38,10 +41,10 @@ class TransferStrategyTest {
 
         strategy.execute(tx, 1L, 2L, BigDecimal.valueOf(100));
 
-        verify(transactionService).executeDebit(1L, 1L, BigDecimal.valueOf(100));
-        verify(transactionService).updateStep(1L, TransactionStep.DEBIT_DONE);
-        verify(transactionService).executeCredit(1L, 2L, BigDecimal.valueOf(100));
-        verify(transactionService).updateStep(1L, TransactionStep.CREDIT_DONE);
+        verify(accountOperationService).debit(1L, 1L, BigDecimal.valueOf(100));
+        verify(transactionStateService).updateStep(1L, TransactionStep.DEBIT_DONE);
+        verify(accountOperationService).credit(1L, 2L, BigDecimal.valueOf(100));
+        verify(transactionStateService).updateStep(1L, TransactionStep.CREDIT_DONE);
     }
 
     @Test
@@ -56,9 +59,9 @@ class TransferStrategyTest {
 
         strategy.execute(tx, 1L, 2L, BigDecimal.valueOf(100));
 
-        verify(transactionService, never()).executeDebit(any(), any(), any());
-        verify(transactionService).executeCredit(1L, 2L, BigDecimal.valueOf(100));
-        verify(transactionService).updateStep(1L, TransactionStep.CREDIT_DONE);
+        verify(accountOperationService, never()).debit(any(), any(), any());
+        verify(accountOperationService).credit(1L, 2L, BigDecimal.valueOf(100));
+        verify(transactionStateService).updateStep(1L, TransactionStep.CREDIT_DONE);
     }
 
     @Test
@@ -71,8 +74,8 @@ class TransferStrategyTest {
                 .build();
 
         doThrow(new ConflictException("Lock"))
-                .when(transactionService)
-                .executeDebit(any(), any(), any());
+                .when(accountOperationService)
+                .debit(any(), any(), any());
 
         assertThrows(ConflictException.class, () ->
                 strategy.execute(tx, 1L, 2L, BigDecimal.TEN)
@@ -90,14 +93,14 @@ class TransferStrategyTest {
                 .build();
 
         doThrow(new RuntimeException("Credit failed"))
-                .when(transactionService)
-                .executeCredit(any(), any(), any());
+                .when(accountOperationService)
+                .credit(any(), any(), any());
 
         assertThrows(BadRequestException.class, () ->
                 strategy.execute(tx, 1L, 2L, BigDecimal.TEN)
         );
 
-        verify(transactionService)
+        verify(accountOperationService)
                 .compensate(1L, 1L, BigDecimal.TEN);
     }
 
@@ -112,18 +115,18 @@ class TransferStrategyTest {
                 .build();
 
         doThrow(new RuntimeException("Credit failed"))
-                .when(transactionService)
-                .executeCredit(any(), any(), any());
+                .when(accountOperationService)
+                .credit(any(), any(), any());
 
         doThrow(new RuntimeException("Rollback failed"))
-                .when(transactionService)
+                .when(accountOperationService)
                 .compensate(any(), any(), any());
 
         assertThrows(BadRequestException.class, () ->
                 strategy.execute(tx, 1L, 2L, BigDecimal.TEN)
         );
 
-        verify(transactionService)
+        verify(transactionStateService)
                 .updateStatus(eq(1L), eq(Status.FAILED), contains("Compensation failed"));
     }
 

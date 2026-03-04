@@ -8,6 +8,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import transaction_service.transaction_service.mapper.LimitMapper;
 import transaction_service.transaction_service.model.TransactionLimit;
 import transaction_service.transaction_service.repository.TransactionLimitRepository;
 import transaction_service.transaction_service.repository.TransactionRepository;
@@ -26,7 +27,8 @@ class LimitServiceTest {
     private TransactionLimitRepository transactionLimitRepository;
     @Mock
     private TransactionRepository transactionRepository;
-
+    @Mock
+    private LimitMapper limitMapper;
     @InjectMocks
     private LimitService limitService;
 
@@ -37,11 +39,13 @@ class LimitServiceTest {
 
     @BeforeEach
     void setUp() {
-        userId = 1L;
-        userLimit = new TransactionLimit();
-        userLimit.setUserId(userId);
-        userLimit.setDailyLimit(defaultDaily);
-        userLimit.setSingleLimit(defaultSingle);
+        userId = 123L;
+        userLimit = TransactionLimit.builder()
+                .id(1L)
+                .userId(userId)
+                .dailyLimit(defaultDaily)
+                .singleLimit(defaultSingle)
+                .build();
     }
 
     //checkTransactionLimit
@@ -112,6 +116,14 @@ class LimitServiceTest {
     @Test
     @DisplayName("Should return existing limits")
     void getLimits_ReturnsExisting() {
+        when(limitMapper.toDto(any(TransactionLimit.class)))
+                .thenAnswer(invocation -> {
+                    TransactionLimit tx = invocation.getArgument(0);
+                    return LimitResponseDto.builder()
+                            .dailyLimit(tx.getDailyLimit())
+                            .singleLimit(tx.getSingleLimit())
+                            .build();
+                });
         when(transactionLimitRepository.findByUserId(userId)).thenReturn(Optional.of(userLimit));
 
         LimitResponseDto result = limitService.getLimits(userId);
@@ -136,16 +148,26 @@ class LimitServiceTest {
     @Test
     @DisplayName("Should update values and save")
     void updateLimits_UpdatesAndSaves() {
+
+        when(limitMapper.toDto(any(TransactionLimit.class)))
+                .thenAnswer(invocation -> {
+                    TransactionLimit tx = invocation.getArgument(0);
+                    return LimitResponseDto.builder()
+                            .dailyLimit(tx.getDailyLimit())
+                            .singleLimit(tx.getSingleLimit())
+                            .build();
+                });
+
         BigDecimal newDaily = new BigDecimal("10000");
         BigDecimal newSingle = new BigDecimal("2000");
 
-        when(transactionLimitRepository.findByUserId(userId)).thenReturn(Optional.of(userLimit));
-        when(transactionLimitRepository.save(any(TransactionLimit.class))).thenAnswer(i -> i.getArguments()[0]);
+        when(transactionLimitRepository.findByUserId(any())).thenReturn(Optional.of(userLimit));
+        when(transactionLimitRepository.save(any(TransactionLimit.class))).thenAnswer(i -> i.getArgument(0));
 
         LimitResponseDto result = limitService.updateLimits(userId, newDaily, newSingle);
 
         assertEquals(newDaily, result.getDailyLimit());
         assertEquals(newSingle, result.getSingleLimit());
-        verify(transactionLimitRepository).save(userLimit);
+        verify(transactionLimitRepository).save(any(TransactionLimit.class));
     }
 }
