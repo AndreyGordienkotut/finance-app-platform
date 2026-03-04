@@ -19,7 +19,6 @@ import java.util.Objects;
 @Slf4j
 public class CategoryService {
     private final TransactionCategoryRepository categoryRepository;
-    private final TransactionRepository transactionRepository;
 
     public List<TransactionCategory> getAllCategoriesForUser(Long userId) {
         return categoryRepository.findByUserIdOrUserIdIsNull(userId);
