@@ -37,9 +37,10 @@ Account Service
 - Інтеграція з transaction-service
 
 Transaction Service
+
 Сервіс використовує оркестраційний підхід для забезпечення цілісності даних:
 - Проведення фінансових операцій через паттерн Strategy:
-  -TRANSFER
+  - TRANSFER
   - DEPOSIT
   - WITHDRAW
 - Idempotency-підхід для запобігання дублюванню транзакцій
@@ -107,12 +108,17 @@ Exchange Rate Service
 Проєкт повністю контейнеризований і готовий до запуску
 1. Збірка проєкта:
 ./gradlew build
+
 2. Запуск усіх сервісів та інфраструктури:
 docker-compose up -d
-Після запуску Swagger доступний за адресами сервісів:
-http://localhost:8080/swagger-ui.html  - AuthService
-http://localhost:8081/swagger-ui.html  - AccountService
-http://localhost:8082/swagger-ui.html  - TransactionService
+
+3. Після запуску Swagger доступний за адресами сервісів:\
+AuthService:
+http://localhost:8080/swagger-ui.html
+AccountService:
+http://localhost:8081/swagger-ui.html 
+TransactionService:
+http://localhost:8082/swagger-ui.html 
 
 Додаткова інформація
 - Проєкт орієнтований на продакшн-підхід
