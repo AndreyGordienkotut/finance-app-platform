@@ -3,13 +3,12 @@ import auth_service.auth_service.dto.AuthenticationRequestDto;
 import auth_service.auth_service.dto.RefreshTokenRequestDto;
 import auth_service.auth_service.model.EmailVerification;
 import core.core.exception.*;
-import auth_service.auth_service.dto.AuthenticationResponseDto;
 import auth_service.auth_service.dto.RegisterRequestDto;
 import auth_service.auth_service.model.RefreshToken;
-import auth_service.auth_service.model.Role;
 import auth_service.auth_service.model.Users;
 import auth_service.auth_service.repository.EmailVerificationTokensRepository;
 import auth_service.auth_service.repository.UsersRepository;
+import core.core.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -17,21 +16,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
 
-import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;

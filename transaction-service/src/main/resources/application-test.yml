@@ -1,4 +1,6 @@
 JWT_SECRET: 1234mSlongtdmVyeS1zdHJvbmctc2VjcmV0LWtleS1mb3Itand0LXNpZ25pbmc=
+JWT_EXPIRATION: 3600000
+JWT_REFRESH_EXPIRATION: 604800000
 
 spring:
   liquibase:

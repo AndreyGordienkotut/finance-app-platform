@@ -5,8 +5,8 @@ import auth_service.auth_service.dto.AuthenticationResponseDto;
 import auth_service.auth_service.dto.RefreshTokenRequestDto;
 import auth_service.auth_service.dto.RegisterRequestDto;
 import auth_service.auth_service.mapper.AuthMapper;
-import core.core.config.JwtClaims;
 import core.core.exception.*;
+import core.core.security.JwtService;
 import auth_service.auth_service.model.EmailVerification;
 import auth_service.auth_service.model.RefreshToken;
 import auth_service.auth_service.model.Role;
@@ -23,8 +23,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @Service

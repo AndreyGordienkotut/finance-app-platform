@@ -3,7 +3,7 @@ package auth_service.auth_service;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"auth_service.auth_service", "core.core.security"})
 public class AuthServiceApplication {
 
     public static void main(String[] args) {

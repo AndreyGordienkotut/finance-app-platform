@@ -3,7 +3,7 @@ package auth_service.auth_service.config;
 import auth_service.auth_service.controller.AuthorizationController;
 import auth_service.auth_service.repository.UsersRepository;
 import auth_service.auth_service.service.AuthorizationService;
-import auth_service.auth_service.service.JwtService;
+import core.core.security.JwtService;
 import core.core.exception.GlobalExceptionHandler;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

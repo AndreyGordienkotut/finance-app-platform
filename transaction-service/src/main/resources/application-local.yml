@@ -10,11 +10,11 @@ spring:
   liquibase:
     enabled: true
     change-log: classpath:db/changelog/db.changelog-master.yaml
-    url: ${DB_URL_TRAN}
+    url: ${LOCALE_DB_URL_TRAN}
     user: ${DB_USERNAME}
     password: ${DB_PASSWORD}
   datasource:
-    url: ${DB_URL_TRAN}
+    url: ${LOCALE_DB_URL_TRAN}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver

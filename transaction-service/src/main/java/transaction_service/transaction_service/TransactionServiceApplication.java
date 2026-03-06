@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"transaction_service.transaction_service", "core.core.security"})
 @EnableFeignClients
 @EnableCaching
 public class TransactionServiceApplication {

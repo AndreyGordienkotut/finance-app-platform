@@ -1,7 +1,7 @@
 package auth_service.auth_service.config;
 
 import auth_service.auth_service.repository.UsersRepository;
-import auth_service.auth_service.service.JwtService;
+import core.core.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

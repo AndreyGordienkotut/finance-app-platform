@@ -1,7 +1,7 @@
 package auth_service.auth_service.config;
 
 
-import auth_service.auth_service.service.JwtService;
+import core.core.security.JwtService;
 import com.google.common.net.HttpHeaders;
 import core.core.config.JwtClaims;
 import core.core.dto.AuthenticatedUser;
