@@ -1,6 +1,8 @@
 package account_service.account_service.service;
 
 import account_service.account_service.model.AppliedTransactions;
+import account_service.account_service.mapper.AccountMapper;
+import org.mapstruct.factory.Mappers;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -21,7 +23,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -29,7 +30,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -40,7 +40,7 @@ public class AccountServiceTest {
     private AccountRepository accountRepository;
     @Mock
     private AppliedTransactionRepository appliedTransactionRepository;
-    @InjectMocks
+    private AccountMapper accountMapper = Mappers.getMapper(AccountMapper.class);
     private AccountService accountService;
 
 
@@ -54,6 +54,7 @@ public class AccountServiceTest {
 
     @BeforeEach
     void setUp() {
+        accountService = new AccountService(accountRepository, appliedTransactionRepository, accountMapper);
         activeAccount = Account.builder()
                 .id(ACCOUNT_ID)
                 .userId(USER_ID)

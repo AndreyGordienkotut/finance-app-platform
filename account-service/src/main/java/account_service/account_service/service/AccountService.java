@@ -56,13 +56,7 @@ public class AccountService {
     public AccountResponseDto closeAccount(Long accountId,Long userId) {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new NotFoundException("Account not found"));
-        if (!account.getUserId().equals(userId)) {
-            throw new BadRequestException("Account with id "+accountId+" is not yours");
-        }
-        if (account.getBalance().compareTo(BigDecimal.ZERO) != 0) {
-            throw new BadRequestException("Account balance must be zero to close.");
-        }
-        account.setStatusAccount(StatusAccount.CLOSED);
+        account.close(userId);
         accountRepository.save(account);
         return accountMapper.toDto(account);
     }
@@ -72,22 +66,10 @@ public class AccountService {
     public AccountResponseDto getAccountById(Long id) {
         Account account = accountRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Account not found"));
-
-        return AccountResponseDto.builder()
-                .id(account.getId())
-                .userId(account.getUserId())
-                .currency(account.getCurrency())
-                .balance(account.getBalance())
-                .status(account.getStatusAccount())
-                .createAt(account.getCreateAt())
-                .build();
+        return accountMapper.toDto(account);
     }
     @Transactional
     public void debit( Long accountId, BigDecimal amount,Long transactionId) {
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BadRequestException("Amount must be positive");
-        }
-
         if (appliedTransactionRepository.existsByTransactionIdAndAccountId(transactionId, accountId)) {
             return;
         }
@@ -100,15 +82,7 @@ public class AccountService {
             throw new ConflictException("Account is busy, retry later", e);
         }
 
-        if (account.getStatusAccount() != StatusAccount.ACTIVE) {
-            throw new BadRequestException("Account is not active");
-        }
-        if (account.getBalance().compareTo(amount) < 0) {
-            throw new BadRequestException("Insufficient funds");
-        }
-
-
-        account.setBalance(account.getBalance().subtract(amount));
+        account.debit(amount);
         accountRepository.save(account);
         appliedTransactionRepository.save(
                 AppliedTransactions.builder()
@@ -122,9 +96,6 @@ public class AccountService {
 
     @Transactional
     public void credit(Long accountId, BigDecimal amount, Long transactionId) {
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BadRequestException("Amount must be positive");
-        }
         if (appliedTransactionRepository.existsByTransactionIdAndAccountId(transactionId, accountId)) {
             return;
         }
@@ -137,10 +108,7 @@ public class AccountService {
             throw new ConflictException("Account is busy, retry later", e);
         }
 
-        if (account.getStatusAccount() != StatusAccount.ACTIVE) {
-            throw new BadRequestException("Account is not active");
-        }
-        account.setBalance(account.getBalance().add(amount));
+        account.credit(amount);
         accountRepository.save(account);
         appliedTransactionRepository.save(
                 AppliedTransactions.builder()
