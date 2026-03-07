@@ -53,6 +53,8 @@ public class TransactionServiceTest {
     @Mock
     private TransactionCreationService transactionCreationService;
     @Mock
+    private RetryBackoffService retryBackoffService;
+    @Mock
     private FinancialOperationStrategy transferStrategy;
     @Mock
     private FinancialOperationStrategy depositStrategy;
@@ -71,7 +73,6 @@ public class TransactionServiceTest {
     private AccountResponseDto toAccount;
     private Transaction txCreated;
     private Transaction txInProgress;
-    private AtomicReference<Transaction> storedTx;
 
     @BeforeEach
     void setUp() {
@@ -91,7 +92,8 @@ public class TransactionServiceTest {
                 transactionValidationService,
                 accountAccessService,
                 accountOperationService,
-                transactionCreationService
+                transactionCreationService,
+                retryBackoffService
         );
 
         transferDto = TransactionRequestDto.builder()
@@ -143,7 +145,6 @@ public class TransactionServiceTest {
                 .createdAt(LocalDateTime.now())
                 .idempotencyKey(idempotencyKey)
                 .build();
-        storedTx = new AtomicReference<>(txInProgress);
         lenient().when(categoryService.validateAndGetCategory(any(), any(), any())).thenReturn(null);
 
     }
@@ -363,6 +364,51 @@ public class TransactionServiceTest {
 
         verify(transactionRepository, never()).save(any());
         verify(transferStrategy, never()).execute(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Retries with backoff on pessimistic lock conflict")
+    void retriesWithBackoffOnPessimisticLock() throws Exception {
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+
+        when(transactionCreationService.createTransaction(
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(txCreated);
+
+        when(transactionRepository.findById(TX_ID))
+                .thenReturn(Optional.of(txCreated));
+
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
+
+        when(transactionMapper.toDto(any()))
+                .thenReturn(new TransactionResponseDto());
+
+        ConflictException lockConflict = new ConflictException(
+                "Account is busy",
+                new PessimisticLockingFailureException("lock")
+        );
+
+        doThrow(lockConflict)
+                .doThrow(lockConflict)
+                .doNothing()
+                .when(transferStrategy)
+                .execute(any(Transaction.class), eq(1L), eq(2L), any());
+
+        doNothing().when(retryBackoffService).backoff(anyInt());
+
+        TransactionResponseDto result =
+                transactionService.transfer(transferDto, userId, idempotencyKey);
+
+        assertNotNull(result);
+        verify(retryBackoffService).backoff(1);
+        verify(retryBackoffService).backoff(2);
+        verify(transactionStateService, atLeastOnce())
+                .updateStatus(eq(TX_ID), eq(Status.PROCESSING), anyString());
     }
     @Test
     @DisplayName("Idempotency: Existing COMPLETED transaction")

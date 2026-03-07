@@ -40,6 +40,7 @@ public class TransactionService {
     private final AccountAccessService accountAccessService;
     private final AccountOperationService accountOperationService;
     private final TransactionCreationService transactionCreationService;
+    private final RetryBackoffService retryBackoffService;
 
     public TransactionService(
             TransactionRepository transactionRepository,
@@ -50,7 +51,8 @@ public class TransactionService {
             TransactionValidationService transactionValidationService,
             AccountAccessService accountAccessService,
             AccountOperationService accountOperationService,
-            TransactionCreationService transactionCreationService
+            TransactionCreationService transactionCreationService,
+            RetryBackoffService retryBackoffService
 
     ) {
         this.transactionRepository = transactionRepository;
@@ -64,8 +66,9 @@ public class TransactionService {
                 ));
         this.transactionValidationService = transactionValidationService;
         this.accountAccessService = accountAccessService;
-        this.accountOperationService=accountOperationService;
-        this.transactionCreationService=transactionCreationService;
+        this.accountOperationService = accountOperationService;
+        this.transactionCreationService = transactionCreationService;
+        this.retryBackoffService = retryBackoffService;
     }
     public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
 
@@ -178,7 +181,7 @@ public class TransactionService {
                     throw e;
                 }
                 try {
-                    Thread.sleep(100L * attempt);
+                    retryBackoffService.backoff(attempt);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     throw new InternalServerErrorException("Retry interrupted");
