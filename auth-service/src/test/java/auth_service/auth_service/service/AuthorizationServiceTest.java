@@ -1,6 +1,8 @@
 package auth_service.auth_service.service;
 import auth_service.auth_service.dto.AuthenticationRequestDto;
+import auth_service.auth_service.dto.AuthenticationResponseDto;
 import auth_service.auth_service.dto.RefreshTokenRequestDto;
+import auth_service.auth_service.mapper.AuthMapper;
 import auth_service.auth_service.model.EmailVerification;
 import core.core.exception.*;
 import auth_service.auth_service.dto.RegisterRequestDto;
@@ -28,6 +30,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+
 @ExtendWith(MockitoExtension.class)
 public class AuthorizationServiceTest {
     @Mock
@@ -36,6 +39,8 @@ public class AuthorizationServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private JwtService jwtService;
+    @Mock
+    private AuthMapper authMapper;
     @Mock
     private AuthenticationManager authenticationManager;
     @Mock
@@ -47,7 +52,7 @@ public class AuthorizationServiceTest {
 
     private RegisterRequestDto regDto;
     private Users testUser;
-
+    private AuthenticationResponseDto authResponseDto;
     @BeforeEach
     void setUp() {
         regDto = new RegisterRequestDto("test@mail.com", "pass123", "cool_user");
@@ -56,6 +61,13 @@ public class AuthorizationServiceTest {
         testUser.setEmail("test@mail.com");
         testUser.setUsername("cool_user");
         testUser.setVerified(true);
+        authResponseDto = AuthenticationResponseDto.builder()
+                .token("jwt")
+                .refreshToken("rf")
+                .userId(1L)
+                .username("cool_user")
+                .email("test@mail.com")
+                .build();
     }
 
     @Test
@@ -72,7 +84,8 @@ public class AuthorizationServiceTest {
 
         when(jwtService.generateToken(any(UserDetails.class), anyLong())).thenReturn("jwt");
         when(refreshTokenService.createRefreshToken(anyLong())).thenReturn(RefreshToken.builder().token("rf").build());
-
+        when(authMapper.toAuthResponse(any(Users.class), anyString(), anyString()))
+                .thenReturn(authResponseDto);
         authorizationService.register(regDto);
 
         ArgumentCaptor<Users> userCaptor = ArgumentCaptor.forClass(Users.class);
@@ -101,7 +114,8 @@ public class AuthorizationServiceTest {
         when(userRepository.findByEmail("test@mail.com")).thenReturn(Optional.of(testUser));
         when(jwtService.generateToken(any(UserDetails.class), anyLong())).thenReturn("jwt");
         when(refreshTokenService.createRefreshToken(1L)).thenReturn(RefreshToken.builder().token("rf").build());
-
+        when(authMapper.toAuthResponse(any(Users.class), anyString(), anyString()))
+                .thenReturn(authResponseDto);
         var response = authorizationService.authenticate(authDto);
 
         assertNotNull(response);
@@ -147,7 +161,8 @@ public class AuthorizationServiceTest {
         RefreshToken rf = RefreshToken.builder().token("old_rf").user(testUser).build();
         when(refreshTokenService.findByToken("old_rf")).thenReturn(Optional.of(rf));
         when(jwtService.generateToken(any(UserDetails.class), anyLong())).thenReturn("jwt");
-
+        when(authMapper.toAuthResponse(any(Users.class), anyString(), anyString()))
+                .thenReturn(authResponseDto);
         authorizationService.refreshToken(new RefreshTokenRequestDto("old_rf"));
         ArgumentCaptor<Long> userIdCaptor = ArgumentCaptor.forClass(Long.class);
 
@@ -184,7 +199,8 @@ public class AuthorizationServiceTest {
         RefreshToken rf = RefreshToken.builder().token("existing_refresh_token").user(testUser).build();
         when(refreshTokenService.findByToken(anyString())).thenReturn(Optional.of(rf));
         when(jwtService.generateToken(any(UserDetails.class), anyLong())).thenReturn("jwt");
-
+        when(authMapper.toAuthResponse(any(Users.class), anyString(), anyString()))
+                .thenReturn(authResponseDto);
         authorizationService.refreshToken(new RefreshTokenRequestDto("existing_refresh_token"));
 
         verify(refreshTokenService, never()).createRefreshToken(anyLong());
