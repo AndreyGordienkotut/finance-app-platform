@@ -9,7 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 @Slf4j
@@ -28,7 +28,7 @@ public class GlobalExceptionHandler {
         String unifiedMessage = "Validation failed: " + String.join("; ", errors);
 
         ApiError apiError = new ApiError(
-                LocalDateTime.now(),
+                Instant.now(),
                 HttpStatus.BAD_REQUEST.value(),
                 "Bad Request (Validation)",
                 unifiedMessage,
@@ -49,7 +49,7 @@ public class GlobalExceptionHandler {
             Exception ex, HttpServletRequest request) {
 
         ApiError apiError = new ApiError(
-                LocalDateTime.now(),
+                Instant.now(),
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 ex.getMessage(),
@@ -66,7 +66,7 @@ public class GlobalExceptionHandler {
             InvalidCredentialsException ex, HttpServletRequest request) {
 
         ApiError apiError = new ApiError(
-                LocalDateTime.now(),
+                Instant.now(),
                 HttpStatus.UNAUTHORIZED.value(),
                 HttpStatus.UNAUTHORIZED.getReasonPhrase(),
                 ex.getMessage(),
@@ -82,7 +82,7 @@ public class GlobalExceptionHandler {
             ForbiddenException ex, HttpServletRequest request) {
 
         ApiError apiError = new ApiError(
-                LocalDateTime.now(),
+                Instant.now(),
                 HttpStatus.FORBIDDEN.value(),
                 HttpStatus.FORBIDDEN.getReasonPhrase(),
                 ex.getMessage(),
@@ -99,7 +99,7 @@ public class GlobalExceptionHandler {
             NotFoundException ex, HttpServletRequest request) {
 
         ApiError apiError = new ApiError(
-                LocalDateTime.now(),
+                Instant.now(),
                 HttpStatus.NOT_FOUND.value(),
                 HttpStatus.NOT_FOUND.getReasonPhrase(),
                 ex.getMessage(),
@@ -116,7 +116,7 @@ public class GlobalExceptionHandler {
             ConflictException ex, HttpServletRequest request) {
 
         ApiError apiError = new ApiError(
-                LocalDateTime.now(),
+                Instant.now(),
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
                 ex.getMessage(),
@@ -126,13 +126,32 @@ public class GlobalExceptionHandler {
         log.warn("API Error (409): {} Path: {}", ex.getMessage(), request.getRequestURI());
         return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
     }
+    // 409 Conflict - Optimistic Lock
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiError> handleOptimisticLockException(
+            ObjectOptimisticLockingFailureException ex, HttpServletRequest request) {
+
+        String message = "The record was updated by another user/process. Please refresh and try again.";
+
+        ApiError apiError = new ApiError(
+                Instant.now(),
+                HttpStatus.CONFLICT.value(),
+                "Optimistic Lock Conflict",
+                message,
+                request.getRequestURI(),
+                null
+        );
+
+        log.warn("Optimistic lock error: {} Path: {}", ex.getMessage(), request.getRequestURI());
+        return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
+    }
     //Limit 429
     @ExceptionHandler(LimitExceededException.class)
     public ResponseEntity<ApiError> handleLimitExceededException(
             LimitExceededException ex, HttpServletRequest request) {
 
         ApiError apiError = new ApiError(
-                LocalDateTime.now(),
+                Instant.now(),
                 HttpStatus.TOO_MANY_REQUESTS.value(),
                 "Limit Exceeded",
                 ex.getMessage(),
@@ -150,7 +169,7 @@ public class GlobalExceptionHandler {
         log.error("API Critical error (500): {} Path: {}", ex.getMessage(), request.getRequestURI(), ex);
 
         ApiError apiError = new ApiError(
-                LocalDateTime.now(),
+                Instant.now(),
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),
                 "An unexpected internal error occurred. Service: " + request.getRequestURI().split("/")[1],
@@ -165,7 +184,7 @@ public class GlobalExceptionHandler {
             ExternalServiceException ex, HttpServletRequest request) {
 
         ApiError apiError = new ApiError(
-                LocalDateTime.now(),
+                Instant.now(),
                 HttpStatus.SERVICE_UNAVAILABLE.value(),
                 "External Service Error",
                 ex.getMessage(),

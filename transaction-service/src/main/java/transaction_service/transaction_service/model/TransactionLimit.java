@@ -29,4 +29,6 @@ public class TransactionLimit {
 
     @Column(name = "single_limit",nullable = false)
     private BigDecimal singleLimit;
+    @Version
+    private Long version;
 }

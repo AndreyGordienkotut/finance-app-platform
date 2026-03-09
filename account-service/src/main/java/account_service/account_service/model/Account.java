@@ -32,6 +32,8 @@ public class Account {
     private StatusAccount statusAccount;
     @Column(name = "create_at", nullable = false)
     private Instant createAt;
+    @Version
+    private Long version;
 
     public void close(Long requestUserId) {
         if (!this.userId.equals(requestUserId)) {

@@ -58,8 +58,8 @@ public class Transaction {
     @JoinColumn(name = "transaction_category_id")
     private TransactionCategory category;
 
-//    @Version
-//    private Long version;
+    @Version
+    private Long version;
 
 
 }
