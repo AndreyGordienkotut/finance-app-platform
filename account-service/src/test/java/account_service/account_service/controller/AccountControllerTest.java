@@ -32,7 +32,8 @@ import org.springframework.security.test.context.support.WithMockUser;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 
@@ -72,7 +73,7 @@ public class AccountControllerTest {
         }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
 
         activeAccountDto = new AccountResponseDto(
-                1L, USER_ID, Currency.USD, BigDecimal.ZERO, StatusAccount.ACTIVE, LocalDateTime.now()
+                1L, USER_ID, Currency.USD, BigDecimal.ZERO, StatusAccount.ACTIVE, Instant.now()
         );
     }
     @Test

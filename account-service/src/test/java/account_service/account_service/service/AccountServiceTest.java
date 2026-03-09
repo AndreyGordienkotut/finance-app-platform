@@ -27,7 +27,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -61,7 +61,7 @@ public class AccountServiceTest {
                 .currency(Currency.USD)
                 .balance(BigDecimal.valueOf(500))
                 .statusAccount(StatusAccount.ACTIVE)
-                .createAt(LocalDateTime.now())
+                .createAt(Instant.now())
                 .build();
 
         closedAccount = Account.builder()
@@ -70,7 +70,7 @@ public class AccountServiceTest {
                 .currency(Currency.EUR)
                 .balance(BigDecimal.ZERO)
                 .statusAccount(StatusAccount.CLOSED)
-                .createAt(LocalDateTime.now())
+                .createAt(Instant.now())
                 .build();
     }
     //create Account

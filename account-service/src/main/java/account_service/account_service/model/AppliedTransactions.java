@@ -7,7 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Data
@@ -25,6 +25,6 @@ public class AppliedTransactions {
     private Account account;
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
 }

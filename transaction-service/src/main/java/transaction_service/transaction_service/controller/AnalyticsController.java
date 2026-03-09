@@ -14,7 +14,8 @@ import transaction_service.transaction_service.dto.TopCategoryResponse;
 import transaction_service.transaction_service.dto.TotalSpentResponse;
 import transaction_service.transaction_service.service.AnalyticsService;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+
 import java.util.List;
 
 @RestController
@@ -26,8 +27,8 @@ public class AnalyticsController {
     @GetMapping("/total")
     public ResponseEntity<TotalSpentResponse> getTotalSpent(
             @AuthenticationPrincipal AuthenticatedUser user,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         return ResponseEntity.ok(analyticsService.getTotalSpent(user.userId(), from, to));
     }
 
@@ -35,15 +36,15 @@ public class AnalyticsController {
     public ResponseEntity<List<TopCategoryResponse>> getTopCategories(
             @AuthenticationPrincipal AuthenticatedUser user,
             @RequestParam(required = false, defaultValue = "3") int limit,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
         return ResponseEntity.ok(analyticsService.getTopCategories(user.userId(), from, to, limit));
     }
     @GetMapping
     public ResponseEntity<List<CategoryStatDto>> getStats(
             @AuthenticationPrincipal AuthenticatedUser user,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant toDate) {
 
         return ResponseEntity.ok(analyticsService.getCategoryStats(user.userId(), fromDate, toDate));
     }

@@ -18,7 +18,8 @@ import core.core.exception.*;
 import transaction_service.transaction_service.model.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.List;
 
@@ -36,13 +37,13 @@ public class AnalyticsServiceTest {
     @InjectMocks
     private AnalyticsService analyticsService;
     private Long userId;
-    private LocalDateTime from;
-    private LocalDateTime to;
+    private Instant from;
+    private Instant to;
     @BeforeEach
     void setUp() {
         userId = 1L;
-        from = LocalDateTime.now().minusDays(7);
-        to = LocalDateTime.now();
+        from = Instant.now().minus(7, ChronoUnit.DAYS);
+        to = Instant.now();
     }
 
     //Tests for getTotalSpent
@@ -78,14 +79,14 @@ public class AnalyticsServiceTest {
     void getTotalSpent_UsesDefaultDates() {
         analyticsService.getTotalSpent(userId, null, null);
 
-        verify(transactionRepository).getTotalSpent(eq(userId), eq(Status.COMPLETED), any(LocalDateTime.class), any(LocalDateTime.class));
+        verify(transactionRepository).getTotalSpent(eq(userId), eq(Status.COMPLETED), any(Instant.class), any(Instant.class));
     }
 
     @Test
     @DisplayName("Should throw BadRequestException when from > to")
     void getTotalSpent_ThrowsException_WhenFromAfterTo() {
-        LocalDateTime invalidFrom = LocalDateTime.now();
-        LocalDateTime invalidTo = LocalDateTime.now().minusDays(1);
+        Instant invalidFrom = Instant.now();
+        Instant invalidTo = Instant.now().minus(1,ChronoUnit.DAYS);
 
         assertThrows(BadRequestException.class, () ->
                 analyticsService.getTotalSpent(userId, invalidFrom, invalidTo));
@@ -96,10 +97,10 @@ public class AnalyticsServiceTest {
     @Test
     @DisplayName("Should throw BadRequestException when range > 365 days")
     void getTotalSpent_ThrowsException_WhenRangeTooLarge() {
-        LocalDateTime longAgo = LocalDateTime.now().minusDays(400);
+        Instant longAgo = Instant.now().minus(400,ChronoUnit.DAYS);
 
         assertThrows(BadRequestException.class, () ->
-                analyticsService.getTotalSpent(userId, longAgo, LocalDateTime.now()));
+                analyticsService.getTotalSpent(userId, longAgo, Instant.now()));
     }
     //Tests for getTopCategories
 
@@ -136,8 +137,8 @@ public class AnalyticsServiceTest {
     @Test
     @DisplayName("Should map repository objects to CategoryStatDto")
     void getCategoryStats_MapsCorrectly() {
-        LocalDateTime from = LocalDateTime.now().minusDays(1);
-        LocalDateTime to = LocalDateTime.now();
+        Instant from = Instant.now().minus(1,ChronoUnit.DAYS);
+        Instant to = Instant.now();
 
         List<Object[]> mockResults = Collections.singletonList(
                 new Object[]{100L, "FOOD", new BigDecimal("150.00")}

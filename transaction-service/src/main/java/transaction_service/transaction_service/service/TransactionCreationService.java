@@ -10,7 +10,7 @@ import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Service
 @RequiredArgsConstructor
@@ -45,7 +45,7 @@ public class TransactionCreationService {
                 .exchangeRate(rate)
                 .status(Status.CREATED)
                 .currency(currency)
-                .createdAt(LocalDateTime.now())
+                .createdAt(Instant.now())
                 .idempotencyKey(idempotencyKey)
                 .transactionType(type)
                 .step(TransactionStep.NONE)

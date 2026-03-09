@@ -6,14 +6,14 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.Instant;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class TimelineResponse {
-    private LocalDate period;
+    private Instant period;
     private BigDecimal total;
 }
 

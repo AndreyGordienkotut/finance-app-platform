@@ -8,7 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Data
 @Builder
@@ -20,5 +20,5 @@ public class AccountResponseDto {
     private Currency currency;
     private BigDecimal balance;
     private StatusAccount status;
-    private LocalDateTime createAt;
+    private Instant createAt;
 }

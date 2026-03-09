@@ -12,7 +12,8 @@ import transaction_service.transaction_service.repository.TransactionLimitReposi
 import transaction_service.transaction_service.repository.TransactionRepository;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 @Slf4j
 @Service
@@ -32,7 +33,7 @@ public class LimitService {
         if(amount.compareTo(limit.getSingleLimit())>0){
             throw new LimitExceededException("Transaction amount exceeds single limit of " + limit.getSingleLimit());
         }
-        LocalDateTime twentyFourHoursAgo = LocalDateTime.now().minusHours(24);
+        Instant twentyFourHoursAgo = Instant.now().minus(24, ChronoUnit.HOURS);
 
         BigDecimal spentInLast24h = transactionRepository.calculateTotalSpentForUserInLast24Hours(userId, twentyFourHoursAgo);
 

@@ -10,7 +10,8 @@ import transaction_service.transaction_service.model.TransactionCategory;
 import transaction_service.transaction_service.model.TransactionType;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
+
 
 @Data
 @Builder
@@ -25,9 +26,9 @@ public class TransactionResponseDto {
     private BigDecimal exchangeRate;
     private Currency currency;
     private Status status;
-    private LocalDateTime createdAt;
+    private Instant createdAt;
     private String error;
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
     private TransactionType transactionType;
     private TransactionCategory category;
 

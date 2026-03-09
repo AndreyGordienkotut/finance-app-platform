@@ -10,7 +10,8 @@ import transaction_service.transaction_service.model.TransactionType;
 import transaction_service.transaction_service.repository.TransactionRepository;
 import transaction_service.transaction_service.service.strategy.FinancialOperationStrategy;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -28,7 +29,7 @@ public class TransactionRecoveryService {
     public void recoverStuckTransactions() {
         log.info("Starting recovery process for stuck transactions...");
 
-        LocalDateTime timeoutThreshold = LocalDateTime.now().minusMinutes(PROCESSING_TIMEOUT_MINUTES);
+        Instant timeoutThreshold = Instant.now().minus(PROCESSING_TIMEOUT_MINUTES, ChronoUnit.MINUTES);
 
         List<Transaction> stuckTransactions = transactionRepository
                 .findByStatusAndUpdatedAtBefore(Status.PROCESSING, timeoutThreshold);

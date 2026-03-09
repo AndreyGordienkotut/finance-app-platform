@@ -5,7 +5,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Data
@@ -34,11 +34,11 @@ public class Transaction {
     @Column( nullable = false)
     private Status status;
     @Column(nullable = false, name = "create_at")
-    private LocalDateTime createdAt;
+    private Instant createdAt;
     @Column(name="error_message")
     private String errorMessage;
     @Column(name = "update_at")
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
     @Column(name = "idempotency_key", unique = true, nullable = false)
     private String idempotencyKey;
     @Enumerated(EnumType.STRING)

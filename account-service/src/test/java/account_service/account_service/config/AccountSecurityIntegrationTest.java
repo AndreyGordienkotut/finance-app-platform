@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -92,7 +92,7 @@ class AccountSecurityIntegrationTest {
                 .currency(Currency.USD)
                 .balance(BigDecimal.ZERO)
                 .status(StatusAccount.ACTIVE)
-                .createAt(LocalDateTime.now())
+                .createAt(Instant.now())
                 .build();
 
         when(accountService.createAccount(any(AccountRequestDto.class), eq(userId)))

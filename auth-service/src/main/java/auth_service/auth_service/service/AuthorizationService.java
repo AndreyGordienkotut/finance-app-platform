@@ -22,7 +22,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 @Service
@@ -54,7 +55,7 @@ public class AuthorizationService {
                 .user(savedUser)
                 .token(token)
                 .used(false)
-                .expiryAt(LocalDateTime.now().plusHours(24))
+                .expiryAt(Instant.now().plus(24, ChronoUnit.HOURS))
                 .build();
         emailVerificationTokensRepository.save(emailVerificationTokens);
 //        Map<String, Object> extraClaims = Map.of("userId", savedUser.getId());

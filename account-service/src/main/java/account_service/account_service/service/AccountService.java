@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Service
 @RequiredArgsConstructor
@@ -41,7 +41,7 @@ public class AccountService {
                 .currency(accountRequestDto.getCurrency())
                 .balance(BigDecimal.ZERO)
                 .statusAccount(StatusAccount.ACTIVE)
-                .createAt(LocalDateTime.now())
+                .createAt(Instant.now())
                 .build();
         accountRepository.save(account);
         return accountMapper.toDto(account);
@@ -89,7 +89,7 @@ public class AccountService {
                         .transactionId(transactionId)
                         .account(account)
                         .amount(amount)
-                        .createdAt(LocalDateTime.now())
+                        .createdAt(Instant.now())
                         .build()
         );
     }
@@ -115,7 +115,7 @@ public class AccountService {
                         .transactionId(transactionId)
                         .account(account)
                         .amount(amount)
-                        .createdAt(LocalDateTime.now())
+                        .createdAt(Instant.now())
                         .build()
         );
     }

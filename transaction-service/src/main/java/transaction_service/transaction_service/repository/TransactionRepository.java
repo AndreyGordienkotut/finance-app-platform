@@ -10,7 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,7 +20,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     Page<Transaction> findBySourceAccountIdOrTargetAccountId(
             Long sourceAccountId, Long targetAccountId, Pageable pageable);
 
-    List<Transaction> findByStatusAndUpdatedAtBefore(Status status, LocalDateTime dateTime);
+    List<Transaction> findByStatusAndUpdatedAtBefore(Status status, Instant dateTime);
     @Query("SELECT SUM(t.amount) FROM Transaction t " +
             "WHERE t.userId = :userId " +
             "AND t.createdAt > :since " +
@@ -28,7 +28,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
             "AND t.transactionType IN ('TRANSFER', 'WITHDRAW')")
     BigDecimal calculateTotalSpentForUserInLast24Hours(
             @Param("userId") Long userId,
-            @Param("since") LocalDateTime since
+            @Param("since") Instant since
     );
 
 
@@ -46,8 +46,8 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     """)
     List<Object[]> getStatsByCategory(@Param("userId") Long userId,
                                       @Param("status") Status status,
-                                      @Param("from") LocalDateTime from,
-                                      @Param("to") LocalDateTime to);
+                                      @Param("from") Instant from,
+                                      @Param("to") Instant to);
 
     @Query("""
         SELECT SUM(COALESCE(t.targetAmount, t.amount)) 
@@ -59,8 +59,8 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     """)
     BigDecimal getTotalSpent(@Param("userId") Long userId,
                              @Param("status") Status status,
-                             @Param("from") LocalDateTime from,
-                             @Param("to") LocalDateTime to);
+                             @Param("from") Instant from,
+                             @Param("to") Instant to);
 
     @Query("""
         SELECT c.id, c.name, SUM(COALESCE(t.targetAmount, t.amount)) as total 
@@ -74,8 +74,8 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     """)
     List<Object[]> getTopCategories(@Param("userId") Long userId,
                                     @Param("status") Status status,
-                                    @Param("from") LocalDateTime from,
-                                    @Param("to") LocalDateTime to,
+                                    @Param("from") Instant from,
+                                    @Param("to") Instant to,
                                     Pageable pageable);
 
 }

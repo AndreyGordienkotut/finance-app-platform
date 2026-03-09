@@ -7,7 +7,6 @@ import account_service.account_service.repository.AccountRepository;
 import account_service.account_service.service.AccountService;
 import core.core.enums.Currency;
 import core.core.enums.StatusAccount;
-import core.core.exception.GlobalExceptionHandler;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -16,21 +15,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
-import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -69,7 +62,7 @@ public class AccountConcurrencyIntegrationTest {
                 .balance(new BigDecimal("100.00"))
                 .currency(Currency.USD)
                 .statusAccount(StatusAccount.ACTIVE)
-                .createAt(LocalDateTime.now())
+                .createAt(Instant.now())
                 .build();
         account = accountRepository.saveAndFlush(account);
         Long accId = account.getId();

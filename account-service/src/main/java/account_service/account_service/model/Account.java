@@ -10,7 +10,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Data
@@ -31,7 +31,7 @@ public class Account {
     @Column(name = "status_account")
     private StatusAccount statusAccount;
     @Column(name = "create_at", nullable = false)
-    private LocalDateTime createAt;
+    private Instant createAt;
 
     public void close(Long requestUserId) {
         if (!this.userId.equals(requestUserId)) {

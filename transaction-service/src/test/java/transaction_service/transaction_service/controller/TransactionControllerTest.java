@@ -36,7 +36,7 @@ import transaction_service.transaction_service.service.TransactionService;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.*;
@@ -93,8 +93,8 @@ public class TransactionControllerTest {
                 .exchangeRate(BigDecimal.ONE)
                 .currency(Currency.USD)
                 .status(Status.COMPLETED)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
+                .createdAt(Instant.now())
+                .updatedAt(Instant.now())
                 .transactionType(TransactionType.TRANSFER)
                 .category(null)
                 .build();
@@ -107,7 +107,7 @@ public class TransactionControllerTest {
                 .exchangeRate(BigDecimal.ONE)
                 .currency(Currency.USD)
                 .status(Status.COMPLETED)
-                .createdAt(LocalDateTime.now())
+                .createdAt(Instant.now())
                 .transactionType(TransactionType.DEPOSIT)
                 .build();
 
@@ -119,7 +119,7 @@ public class TransactionControllerTest {
                 .exchangeRate(BigDecimal.ONE)
                 .currency(Currency.USD)
                 .status(Status.COMPLETED)
-                .createdAt(LocalDateTime.now())
+                .createdAt(Instant.now())
                 .transactionType(TransactionType.WITHDRAW)
                 .build();
 

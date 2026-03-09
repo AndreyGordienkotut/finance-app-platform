@@ -20,7 +20,9 @@ import transaction_service.transaction_service.service.AnalyticsService;
 import transaction_service.transaction_service.service.TransactionStateService;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -73,15 +75,15 @@ class AnalyticsCacheIntegrationTest {
                         .currency(Currency.EUR)
                         .status(Status.COMPLETED)
                         .step(TransactionStep.CREDIT_DONE)
-                        .createdAt(LocalDateTime.now().minusMinutes(1))
-                        .updatedAt(LocalDateTime.now())
+                        .createdAt(Instant.now().minus(1, ChronoUnit.MINUTES))
+                        .updatedAt(Instant.now())
                         .idempotencyKey("test-key-1")
                         .transactionType(TransactionType.TRANSFER)
                         .targetAmount(amount)
                         .build()
         );
 
-        TotalSpentResponse resp1 = analyticsService.getTotalSpent(userId, LocalDateTime.now().minusDays(1), LocalDateTime.now());
+        TotalSpentResponse resp1 = analyticsService.getTotalSpent(userId, Instant.now().minus(1,ChronoUnit.DAYS), Instant.now());
         assertThat(resp1.getTotalSpent()).isEqualTo(amount);
 
         Set<String> keys = redisTemplate.keys("*totalSpent*");
@@ -92,7 +94,7 @@ class AnalyticsCacheIntegrationTest {
         keys = redisTemplate.keys("total:" + userId + ":*");
         assertThat(keys).isEmpty();
 
-        TotalSpentResponse resp2 = analyticsService.getTotalSpent(userId, LocalDateTime.now().minusDays(1), LocalDateTime.now());
+        TotalSpentResponse resp2 = analyticsService.getTotalSpent(userId, Instant.now().minus(1,ChronoUnit.DAYS), Instant.now());
         assertThat(resp2.getTotalSpent()).isEqualTo(BigDecimal.ZERO);
 
         keys = redisTemplate.keys("*totalSpent*");

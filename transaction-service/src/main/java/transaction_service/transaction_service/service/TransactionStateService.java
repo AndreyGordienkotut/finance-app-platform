@@ -12,7 +12,8 @@ import transaction_service.transaction_service.model.Transaction;
 import transaction_service.transaction_service.model.TransactionStep;
 import transaction_service.transaction_service.repository.TransactionRepository;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+
 
 @Service
 @RequiredArgsConstructor
@@ -25,7 +26,7 @@ public class TransactionStateService {
         Transaction tx = transactionRepository.findById(txId)
                 .orElseThrow(() -> new NotFoundException("Transaction not found"));
         tx.setStep(step);
-        tx.setUpdatedAt(LocalDateTime.now());
+        tx.setUpdatedAt(Instant.now());
         transactionRepository.save(tx);
         log.info("TX {} step updated to {}", txId, step);
     }
@@ -36,7 +37,7 @@ public class TransactionStateService {
         log.info("TX {} updated status: {}", tx.getId(), status);
         tx.setStatus(status);
         tx.setErrorMessage(error);
-        tx.setUpdatedAt(LocalDateTime.now());
+        tx.setUpdatedAt(Instant.now());
 
         transactionRepository.save(tx);
         if (status == Status.COMPLETED || status == Status.FAILED) {

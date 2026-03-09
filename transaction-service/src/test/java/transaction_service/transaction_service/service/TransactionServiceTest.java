@@ -24,7 +24,7 @@ import transaction_service.transaction_service.service.validate.AccountAccessSer
 import transaction_service.transaction_service.service.validate.TransactionValidationService;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -130,7 +130,7 @@ public class TransactionServiceTest {
                 .status(Status.CREATED)
                 .transactionType(TransactionType.TRANSFER)
                 .step(TransactionStep.NONE)
-                .createdAt(LocalDateTime.now())
+                .createdAt(Instant.now())
                 .idempotencyKey(idempotencyKey)
                 .build();
         txInProgress = Transaction.builder()
@@ -142,7 +142,7 @@ public class TransactionServiceTest {
                 .status(Status.PROCESSING)
                 .transactionType(TransactionType.TRANSFER)
                 .step(TransactionStep.NONE)
-                .createdAt(LocalDateTime.now())
+                .createdAt(Instant.now())
                 .idempotencyKey(idempotencyKey)
                 .build();
         lenient().when(categoryService.validateAndGetCategory(any(), any(), any())).thenReturn(null);

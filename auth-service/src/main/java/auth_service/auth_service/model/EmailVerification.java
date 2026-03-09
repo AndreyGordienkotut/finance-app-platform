@@ -6,7 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Table(name = "email_verification_tokens")
@@ -27,7 +27,7 @@ public class EmailVerification {
     private String token;
 
     @Column(nullable = false,name = "expires_at")
-    private LocalDateTime expiryAt;
+    private Instant expiryAt;
     @Column(nullable = false)
     private boolean used;
 

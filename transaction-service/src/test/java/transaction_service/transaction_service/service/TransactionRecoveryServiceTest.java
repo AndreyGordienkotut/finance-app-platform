@@ -13,7 +13,8 @@ import transaction_service.transaction_service.repository.TransactionRepository;
 import transaction_service.transaction_service.service.strategy.FinancialOperationStrategy;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 
@@ -45,7 +46,7 @@ class TransactionRecoveryServiceTest {
                 .targetAccountId(2L)
                 .amount(new BigDecimal("100.00"))
                 .step(TransactionStep.DEBIT_DONE)
-                .updatedAt(LocalDateTime.now().minusMinutes(10))
+                .updatedAt(Instant.now().minus(10, ChronoUnit.MINUTES))
                 .build();
         strategies = Map.of(TransactionType.TRANSFER, transferStrategy);
         ReflectionTestUtils.setField(recoveryService, "strategies", strategies);
@@ -54,7 +55,7 @@ class TransactionRecoveryServiceTest {
     @Test
     @DisplayName("Should do nothing when no stuck transactions found")
     void recover_NoStuckTransactions() {
-        when(transactionRepository.findByStatusAndUpdatedAtBefore(eq(Status.PROCESSING), any(LocalDateTime.class)))
+        when(transactionRepository.findByStatusAndUpdatedAtBefore(eq(Status.PROCESSING), any(Instant.class)))
                 .thenReturn(List.of());
 
         recoveryService.recoverStuckTransactions();
@@ -66,7 +67,7 @@ class TransactionRecoveryServiceTest {
     @Test
     @DisplayName("Should successfully recover and complete a stuck transaction")
     void recover_SuccessfulRecovery() {
-        when(transactionRepository.findByStatusAndUpdatedAtBefore(eq(Status.PROCESSING), any(LocalDateTime.class)))
+        when(transactionRepository.findByStatusAndUpdatedAtBefore(eq(Status.PROCESSING), any(Instant.class)))
                 .thenReturn(List.of(stuckTx));
 
         recoveryService.recoverStuckTransactions();
@@ -83,7 +84,7 @@ class TransactionRecoveryServiceTest {
     @Test
     @DisplayName("Should mark transaction as FAILED if recovery throws exception")
     void recover_FailedRecovery() {
-        when(transactionRepository.findByStatusAndUpdatedAtBefore(eq(Status.PROCESSING), any(LocalDateTime.class)))
+        when(transactionRepository.findByStatusAndUpdatedAtBefore(eq(Status.PROCESSING), any(Instant.class)))
                 .thenReturn(List.of(stuckTx));
 
         doThrow(new RuntimeException("Network error"))
