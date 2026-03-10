@@ -21,6 +21,7 @@ import transaction_service.transaction_service.repository.TransactionRepository;
 import transaction_service.transaction_service.service.strategy.FinancialOperationStrategy;
 import org.springframework.dao.PessimisticLockingFailureException;
 import transaction_service.transaction_service.service.validate.AccountAccessService;
+import transaction_service.transaction_service.service.validate.FraudValidationService;
 import transaction_service.transaction_service.service.validate.TransactionValidationService;
 
 import java.math.BigDecimal;
@@ -60,6 +61,8 @@ public class TransactionServiceTest {
     private FinancialOperationStrategy depositStrategy;
     @Mock
     private FinancialOperationStrategy withdrawStrategy;
+    @Mock
+    private FraudValidationService fraudValidationService;
 
 
     private TransactionService transactionService;
@@ -93,7 +96,8 @@ public class TransactionServiceTest {
                 accountAccessService,
                 accountOperationService,
                 transactionCreationService,
-                retryBackoffService
+                retryBackoffService,
+                fraudValidationService
         );
 
         transferDto = TransactionRequestDto.builder()
@@ -613,5 +617,25 @@ public class TransactionServiceTest {
 
         verify(transferStrategy, times(1))
                 .execute(any(), any(), any(), any());
+    }
+    @Test
+    @DisplayName("Fraud check triggered during transfer")
+    void transfer_fraudCheckCalled() {
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+
+        doThrow(new FraudDetectedException("Transaction amount is suspiciously large"))
+                .when(fraudValidationService)
+                .validate(eq(userId), any(), any());
+
+        assertThrows(FraudDetectedException.class,
+                () -> transactionService.transfer(transferDto, userId, idempotencyKey));
+
+        verify(transactionCreationService, never())
+                .createTransaction(any(), any(), any(), any(), any(), any(), any(), any());
     }
 }

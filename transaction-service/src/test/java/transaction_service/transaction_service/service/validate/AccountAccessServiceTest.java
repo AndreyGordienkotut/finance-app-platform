@@ -1,4 +1,4 @@
-package transaction_service.transaction_service.service.validation;
+package transaction_service.transaction_service.service.validate;
 
 import core.core.dto.AccountResponseDto;
 import core.core.enums.StatusAccount;
@@ -10,7 +10,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import transaction_service.transaction_service.config.AccountClient;
-import transaction_service.transaction_service.service.validate.AccountAccessService;
 
 
 import java.math.BigDecimal;

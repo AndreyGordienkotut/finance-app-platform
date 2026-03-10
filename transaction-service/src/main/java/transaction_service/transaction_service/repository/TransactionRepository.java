@@ -78,4 +78,15 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
                                     @Param("to") Instant to,
                                     Pageable pageable);
 
+    @Query("""
+    SELECT COUNT(t) FROM Transaction t
+    WHERE t.userId = :userId
+    AND t.createdAt > :since
+    AND t.status NOT IN ('FAILED')
+    """)
+    long countByUserIdAndCreatedAtAfter(
+            @Param("userId") Long userId,
+            @Param("since") Instant since
+    );
+
 }

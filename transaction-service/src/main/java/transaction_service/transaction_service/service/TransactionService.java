@@ -19,9 +19,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import transaction_service.transaction_service.service.strategy.FinancialOperationStrategy;
 import transaction_service.transaction_service.service.validate.AccountAccessService;
+import transaction_service.transaction_service.service.validate.FraudValidationService;
 import transaction_service.transaction_service.service.validate.TransactionValidationService;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -41,6 +43,7 @@ public class TransactionService {
     private final AccountOperationService accountOperationService;
     private final TransactionCreationService transactionCreationService;
     private final RetryBackoffService retryBackoffService;
+    private final FraudValidationService fraudValidationService;
 
     public TransactionService(
             TransactionRepository transactionRepository,
@@ -52,7 +55,8 @@ public class TransactionService {
             AccountAccessService accountAccessService,
             AccountOperationService accountOperationService,
             TransactionCreationService transactionCreationService,
-            RetryBackoffService retryBackoffService
+            RetryBackoffService retryBackoffService,
+            FraudValidationService fraudValidationService
 
     ) {
         this.transactionRepository = transactionRepository;
@@ -69,6 +73,7 @@ public class TransactionService {
         this.accountOperationService = accountOperationService;
         this.transactionCreationService = transactionCreationService;
         this.retryBackoffService = retryBackoffService;
+        this.fraudValidationService = fraudValidationService;
     }
     public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
 
@@ -85,7 +90,8 @@ public class TransactionService {
             from.getCurrency(),
             TransactionType.TRANSFER,
             idempotencyKey,
-                userId,dto.getCategoryId()
+                userId,dto.getCategoryId(),
+                from.getCreateAt()
         );
     }
 
@@ -106,7 +112,8 @@ public class TransactionService {
                 targetAccount.getCurrency(),
                 TransactionType.DEPOSIT,
                 idempotencyKey,
-                userId,null
+                userId,null,
+                targetAccount.getCreateAt()
         );
     }
 
@@ -123,7 +130,8 @@ public class TransactionService {
                 sourceAccount.getCurrency(),
                 TransactionType.WITHDRAW,
                 idempotencyKey,
-                userId,dto.getCategoryId()
+                userId,dto.getCategoryId(),
+                sourceAccount.getCreateAt()
 
         );
     }
@@ -137,7 +145,7 @@ public class TransactionService {
     private TransactionResponseDto processTransaction(
             Long sourceAccountId, Long targetAccountId, BigDecimal amount,
             Currency currency, TransactionType type, String idempotencyKey,
-            Long userId, Long categoryId)
+            Long userId, Long categoryId, Instant accountCreatedAt)
     {
         TransactionCategory category = categoryService.validateAndGetCategory(categoryId, userId, type);
         Optional<Transaction> existingTx = transactionRepository.findByIdempotencyKey(idempotencyKey);
@@ -146,6 +154,7 @@ public class TransactionService {
             TransactionResponseDto txDto = transactionMapper.toDto(tx);
             return txDto;
         }
+        fraudValidationService.validate(userId, amount, accountCreatedAt);
         Transaction tx;
         try {
             tx = transactionCreationService.createTransaction(sourceAccountId, targetAccountId, amount, currency, type, idempotencyKey,userId,category);

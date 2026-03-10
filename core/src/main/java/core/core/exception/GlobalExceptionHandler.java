@@ -145,6 +145,22 @@ public class GlobalExceptionHandler {
         log.warn("Optimistic lock error: {} Path: {}", ex.getMessage(), request.getRequestURI());
         return new ResponseEntity<>(apiError, HttpStatus.CONFLICT);
     }
+    //422 - FraudDetectedException
+    @ExceptionHandler(FraudDetectedException.class)
+    public ResponseEntity<ApiError> handleFraudDetected(
+            FraudDetectedException ex, HttpServletRequest request) {
+
+        ApiError apiError = new ApiError(
+                Instant.now(),
+                HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                "Fraud Detected",
+                ex.getMessage(),
+                request.getRequestURI(),
+                null
+        );
+        log.warn("Fraud check failed: {} Path: {}", ex.getMessage(), request.getRequestURI());
+        return new ResponseEntity<>(apiError, HttpStatus.UNPROCESSABLE_ENTITY);
+    }
     //Limit 429
     @ExceptionHandler(LimitExceededException.class)
     public ResponseEntity<ApiError> handleLimitExceededException(
