@@ -14,7 +14,6 @@
   -  analytics-service — статистика та аналітика витрат
   - exchange-rate-service — отримання та кешування валютних курсів
   - category-service — створення та валідація категорій витрат
-
 Комунікація між сервісами реалізована через REST + OpenFeign, а безпека забезпечується через прокидання JWT-токенів між запитами.
 
 Основний функціонал 
@@ -51,6 +50,8 @@ Transaction Service
   - TransactionStateService
   - TransactionValidationService
   - AccountAccessService
+  - ParallelValidationService
+  - FraudValidationService
 - Перевірка лімітів користувача
 - Збереження історії транзакцій
 - Підтримка категорій витрат
@@ -84,6 +85,7 @@ Exchange Rate Service
 - Чітке розділення відповідальностей
 - SOLID-підхід
 - Exception Handling через @ControllerAdvice
+- Паралельна валідація незалежних перевірок через CompletableFuture.allOf()
 - Валідація вхідних даних
 - Логування ключових бізнес-операцій
 
