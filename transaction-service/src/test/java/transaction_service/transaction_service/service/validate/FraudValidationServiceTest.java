@@ -34,7 +34,7 @@ public class FraudValidationServiceTest {
 
     // checkSuspiciousAmount
     @Test
-    @DisplayName("Amount below threshold — passes")
+    @DisplayName("Amount below threshold - passes")
     public void checkSuspiciousAmount_belowThreshold_passes() {
         when(transactionRepository.countByUserIdAndCreatedAtAfter(eq(USER_ID), any()))
                 .thenReturn(0L);
@@ -45,7 +45,7 @@ public class FraudValidationServiceTest {
     }
 
     @Test
-    @DisplayName("Amount exactly at threshold — passes")
+    @DisplayName("Amount exactly at threshold - passes")
     public void checkSuspiciousAmount_exactThreshold_passes() {
         when(transactionRepository.countByUserIdAndCreatedAtAfter(eq(USER_ID), any()))
                 .thenReturn(0L);
@@ -56,7 +56,7 @@ public class FraudValidationServiceTest {
     }
 
     @Test
-    @DisplayName("Amount above threshold — throws FraudDetectedException")
+    @DisplayName("Amount above threshold - throws FraudDetectedException")
     public void checkSuspiciousAmount_aboveThreshold_throwsFraud() {
         FraudDetectedException ex = assertThrows(FraudDetectedException.class, () ->
                 fraudValidationService.validate(USER_ID, new BigDecimal("10001"), Instant.now().minus(30, ChronoUnit.DAYS))
@@ -69,7 +69,7 @@ public class FraudValidationServiceTest {
     //checkVelocity
 
     @Test
-    @DisplayName("Velocity below limit — passes")
+    @DisplayName("Velocity below limit - passes")
     public void checkVelocity_belowLimit_passes() {
         when(transactionRepository.countByUserIdAndCreatedAtAfter(eq(USER_ID), any()))
                 .thenReturn(4L);
@@ -80,7 +80,7 @@ public class FraudValidationServiceTest {
     }
 
     @Test
-    @DisplayName("Velocity exactly at limit — throws FraudDetectedException")
+    @DisplayName("Velocity exactly at limit - throws FraudDetectedException")
     public void checkVelocity_exactLimit_throwsFraud() {
         when(transactionRepository.countByUserIdAndCreatedAtAfter(eq(USER_ID), any()))
                 .thenReturn(5L);
@@ -93,7 +93,7 @@ public class FraudValidationServiceTest {
     }
 
     @Test
-    @DisplayName("Velocity above limit — throws FraudDetectedException")
+    @DisplayName("Velocity above limit - throws FraudDetectedException")
     public void checkVelocity_aboveLimit_throwsFraud() {
         when(transactionRepository.countByUserIdAndCreatedAtAfter(eq(USER_ID), any()))
                 .thenReturn(10L);
@@ -106,7 +106,7 @@ public class FraudValidationServiceTest {
     //checkNewAccount
 
     @Test
-    @DisplayName("New account with large amount — throws FraudDetectedException")
+    @DisplayName("New account with large amount - throws FraudDetectedException")
     public void checkNewAccount_newAccountLargeAmount_throwsFraud() {
         when(transactionRepository.countByUserIdAndCreatedAtAfter(eq(USER_ID), any()))
                 .thenReturn(0L);
@@ -121,7 +121,7 @@ public class FraudValidationServiceTest {
     }
 
     @Test
-    @DisplayName("New account with small amount — passes")
+    @DisplayName("New account with small amount - passes")
     public void checkNewAccount_newAccountSmallAmount_passes() {
         when(transactionRepository.countByUserIdAndCreatedAtAfter(eq(USER_ID), any()))
                 .thenReturn(0L);
@@ -134,7 +134,7 @@ public class FraudValidationServiceTest {
     }
 
     @Test
-    @DisplayName("Old account with large amount — passes")
+    @DisplayName("Old account with large amount - passes")
     public void checkNewAccount_oldAccountLargeAmount_passes() {
         when(transactionRepository.countByUserIdAndCreatedAtAfter(eq(USER_ID), any()))
                 .thenReturn(0L);
@@ -147,7 +147,7 @@ public class FraudValidationServiceTest {
     }
 
     @Test
-    @DisplayName("accountCreatedAt is null — skips new account check")
+    @DisplayName("accountCreatedAt is null - skips new account check")
     public void checkNewAccount_nullCreatedAt_skipsCheck() {
         when(transactionRepository.countByUserIdAndCreatedAtAfter(eq(USER_ID), any()))
                 .thenReturn(0L);

@@ -15,6 +15,7 @@ import transaction_service.transaction_service.dto.DepositRequestDto;
 import transaction_service.transaction_service.dto.TransactionRequestDto;
 import core.core.exception.*;
 import transaction_service.transaction_service.dto.TransactionResponseDto;
+import transaction_service.transaction_service.dto.ValidationResult;
 import transaction_service.transaction_service.mapper.TransactionMapper;
 import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
@@ -22,6 +23,7 @@ import transaction_service.transaction_service.service.strategy.FinancialOperati
 import org.springframework.dao.PessimisticLockingFailureException;
 import transaction_service.transaction_service.service.validate.AccountAccessService;
 import transaction_service.transaction_service.service.validate.FraudValidationService;
+import transaction_service.transaction_service.service.validate.ParallelValidationService;
 import transaction_service.transaction_service.service.validate.TransactionValidationService;
 
 import java.math.BigDecimal;
@@ -62,7 +64,7 @@ public class TransactionServiceTest {
     @Mock
     private FinancialOperationStrategy withdrawStrategy;
     @Mock
-    private FraudValidationService fraudValidationService;
+    private ParallelValidationService parallelValidationService;
 
 
     private TransactionService transactionService;
@@ -97,7 +99,7 @@ public class TransactionServiceTest {
                 accountOperationService,
                 transactionCreationService,
                 retryBackoffService,
-                fraudValidationService
+                parallelValidationService
         );
 
         transferDto = TransactionRequestDto.builder()
@@ -150,18 +152,26 @@ public class TransactionServiceTest {
                 .idempotencyKey(idempotencyKey)
                 .build();
         lenient().when(categoryService.validateAndGetCategory(any(), any(), any())).thenReturn(null);
-
+//        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+//                .thenReturn(ValidationResult.builder()
+//                        .rate(BigDecimal.ONE)
+//                        .targetAmount(BigDecimal.valueOf(100))
+//                        .build());
     }
 
     @Test
     @DisplayName("Succeed transfer (same currency)")
     void transfer_succeed_sameCurrency() {
-
+        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(ValidationResult.builder()
+                        .rate(BigDecimal.ONE)
+                        .targetAmount(BigDecimal.valueOf(100))
+                        .build());
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
 
         when(transactionCreationService.createTransaction(
-                any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(),any(),any()))
                 .thenReturn(txCreated);
 
         when(transactionRepository.findById(TX_ID))
@@ -195,7 +205,11 @@ public class TransactionServiceTest {
     @Test
     @DisplayName("SAGA: Debit failed -> FAILED status strategy")
     void testDebitFails_Strategy() {
-
+        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(ValidationResult.builder()
+                        .rate(BigDecimal.ONE)
+                        .targetAmount(BigDecimal.valueOf(100))
+                        .build());
         when(accountAccessService.validateAccountOwnership(1L, userId))
                 .thenReturn(fromAccount);
 
@@ -208,7 +222,7 @@ public class TransactionServiceTest {
                 .thenReturn(Optional.empty());
 
         when(transactionCreationService.createTransaction(
-                any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(),any(),any()))
                 .thenAnswer(invocation -> {
                     Transaction tx = txCreated;
                     tx.setId(TX_ID);
@@ -250,12 +264,16 @@ public class TransactionServiceTest {
                 .step(TransactionStep.NONE)
                 .idempotencyKey(idempotencyKey)
                 .build();
-
+        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(ValidationResult.builder()
+                        .rate(BigDecimal.ONE)
+                        .targetAmount(BigDecimal.valueOf(100))
+                        .build());
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
 
         when(transactionCreationService.createTransaction(
-                any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(),any(),any()))
                 .thenReturn(depositTx);
 
         when(transactionRepository.findById(TX_ID))
@@ -286,12 +304,16 @@ public class TransactionServiceTest {
     @Test
     @DisplayName("Strategy throws -> status FAILED")
     void transfer_strategyFails_statusFailed() {
-
+        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(ValidationResult.builder()
+                        .rate(BigDecimal.ONE)
+                        .targetAmount(BigDecimal.valueOf(100))
+                        .build());
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
 
         when(transactionCreationService.createTransaction(
-                any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(),any(),any()))
                 .thenReturn(txCreated);
 
         when(transactionRepository.findById(TX_ID))
@@ -321,12 +343,16 @@ public class TransactionServiceTest {
     @Test
     @DisplayName("Unexpected exception during SAGA -> FAILED + InternalServerErrorException")
     void testUnexpectedExceptionDuringSaga() {
-
+        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(ValidationResult.builder()
+                        .rate(BigDecimal.ONE)
+                        .targetAmount(BigDecimal.valueOf(100))
+                        .build());
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
 
         when(transactionCreationService.createTransaction(
-                any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(),any(),any()))
                 .thenReturn(txCreated);
 
         when(transactionRepository.findById(TX_ID))
@@ -352,6 +378,11 @@ public class TransactionServiceTest {
     @Test
     @DisplayName("Should throw LimitExceededException and stop process")
     void testLimitExceeded() {
+        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(ValidationResult.builder()
+                        .rate(BigDecimal.ONE)
+                        .targetAmount(BigDecimal.valueOf(100))
+                        .build());
         when(accountAccessService.validateAccountOwnership(1L, userId))
                 .thenReturn(fromAccount);
 
@@ -360,7 +391,7 @@ public class TransactionServiceTest {
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
         when(transactionCreationService.createTransaction(
-                any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(),any(),any()))
                 .thenThrow(new LimitExceededException("Limit exceeded"));
 
         assertThrows(LimitExceededException.class,
@@ -373,11 +404,16 @@ public class TransactionServiceTest {
     @Test
     @DisplayName("Retries with backoff on pessimistic lock conflict")
     void retriesWithBackoffOnPessimisticLock() throws Exception {
+        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(ValidationResult.builder()
+                        .rate(BigDecimal.ONE)
+                        .targetAmount(BigDecimal.valueOf(100))
+                        .build());
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
 
         when(transactionCreationService.createTransaction(
-                any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(),any(),any()))
                 .thenReturn(txCreated);
 
         when(transactionRepository.findById(TX_ID))
@@ -444,7 +480,7 @@ public class TransactionServiceTest {
 
         verify(transferStrategy, never()).execute(any(), any(), any(), any());
         verify(transactionCreationService, never())
-                .createTransaction(any(), any(), any(), any(), any(), any(), any(), any());
+                .createTransaction(any(), any(), any(), any(), any(), any(), any(), any(),any(),any());
     }
     @Test
     @DisplayName("Idempotency: Existing PROCESSING transaction")
@@ -475,7 +511,7 @@ public class TransactionServiceTest {
 
         verify(transferStrategy, never()).execute(any(), any(), any(), any());
         verify(transactionCreationService, never())
-                .createTransaction(any(), any(), any(), any(), any(), any(), any(), any());
+                .createTransaction(any(), any(), any(), any(), any(), any(), any(), any(),any(),any());
     }
 
     @Test
@@ -496,12 +532,17 @@ public class TransactionServiceTest {
                             .amount(tx.getAmount())
                             .build();
                 });
+        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(ValidationResult.builder()
+                        .rate(BigDecimal.ONE)
+                        .targetAmount(BigDecimal.valueOf(100))
+                        .build());
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(txCreated));
 
         when(transactionCreationService.createTransaction(
-                any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(),any(),any()))
                 .thenThrow(new DataIntegrityViolationException("Duplicate"));
 
         TransactionResponseDto result =
@@ -519,12 +560,16 @@ public class TransactionServiceTest {
 
         when(accountOperationService.getAccountById(2L))
                 .thenReturn(toAccount);
-
+        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(ValidationResult.builder()
+                        .rate(BigDecimal.ONE)
+                        .targetAmount(BigDecimal.valueOf(100))
+                        .build());
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
 
         when(transactionCreationService.createTransaction(
-                any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(),any(),any()))
                 .thenReturn(txCreated);
 
         when(transactionRepository.findById(TX_ID))
@@ -563,12 +608,16 @@ public class TransactionServiceTest {
 
         when(accountOperationService.getAccountById(2L))
                 .thenReturn(toAccount);
-
+        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(ValidationResult.builder()
+                        .rate(BigDecimal.ONE)
+                        .targetAmount(BigDecimal.valueOf(100))
+                        .build());
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
 
         when(transactionCreationService.createTransaction(
-                any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(),any(),any()))
                 .thenReturn(txCreated);
 
         when(transactionRepository.findById(TX_ID))
@@ -597,12 +646,16 @@ public class TransactionServiceTest {
 
         when(accountOperationService.getAccountById(2L))
                 .thenReturn(toAccount);
-
+        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(ValidationResult.builder()
+                        .rate(BigDecimal.ONE)
+                        .targetAmount(BigDecimal.valueOf(100))
+                        .build());
         when(transactionRepository.findByIdempotencyKey(idempotencyKey))
                 .thenReturn(Optional.empty());
 
         when(transactionCreationService.createTransaction(
-                any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(),any(),any()))
                 .thenReturn(txCreated);
 
         when(transactionRepository.findById(TX_ID))
@@ -619,7 +672,7 @@ public class TransactionServiceTest {
                 .execute(any(), any(), any(), any());
     }
     @Test
-    @DisplayName("Fraud check triggered during transfer")
+    @DisplayName("Fraud check triggered during transfer - blocks transaction creation")
     void transfer_fraudCheckCalled() {
         when(accountAccessService.validateAccountOwnership(1L, userId))
                 .thenReturn(fromAccount);
@@ -629,13 +682,34 @@ public class TransactionServiceTest {
                 .thenReturn(Optional.empty());
 
         doThrow(new FraudDetectedException("Transaction amount is suspiciously large"))
-                .when(fraudValidationService)
-                .validate(eq(userId), any(), any());
+                .when(parallelValidationService)
+                .validate(any(), any(), any(), any(), any(), any());
 
         assertThrows(FraudDetectedException.class,
                 () -> transactionService.transfer(transferDto, userId, idempotencyKey));
 
         verify(transactionCreationService, never())
-                .createTransaction(any(), any(), any(), any(), any(), any(), any(), any());
+                .createTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Limit exceeded during transfer - blocks transaction creation")
+    void transfer_limitExceeded_blocksCreation() {
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+
+        doThrow(new LimitExceededException("Daily limit exceeded"))
+                .when(parallelValidationService)
+                .validate(any(), any(), any(), any(), any(), any());
+
+        assertThrows(LimitExceededException.class,
+                () -> transactionService.transfer(transferDto, userId, idempotencyKey));
+
+        verify(transactionCreationService, never())
+                .createTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 }

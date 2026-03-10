@@ -17,25 +17,11 @@ import java.time.Instant;
 @Slf4j
 public class TransactionCreationService {
     private final TransactionRepository transactionRepository;
-    private final AccountOperationService accountOperationService;
-    private final ExchangeRateService exchangeRateService;
-    private final LimitService limitService;
-
 
     @Transactional
     public Transaction createTransaction(Long sourceId, Long targetId, BigDecimal amount,
-                                         Currency currency, TransactionType type, String idempotencyKey, Long userId, TransactionCategory category) {
+                                         Currency currency, TransactionType type, String idempotencyKey, Long userId, TransactionCategory category,BigDecimal rate, BigDecimal targetAmount) {
 
-
-        BigDecimal rate = BigDecimal.ONE;
-        BigDecimal targetAmount = amount;
-        if (type == TransactionType.TRANSFER && targetId != null) {
-            AccountResponseDto targetAcc = accountOperationService.getAccountById(targetId);
-            if (!currency.equals(targetAcc.getCurrency())) {
-                rate = exchangeRateService.getRate(currency, targetAcc.getCurrency());
-                targetAmount = exchangeRateService.convert(amount, rate);
-            }
-        }
         Transaction tx = Transaction.builder()
                 .userId(userId)
                 .sourceAccountId(sourceId)
@@ -52,10 +38,8 @@ public class TransactionCreationService {
                 .category(category)
                 .build();
 
-        BigDecimal limitAmount = type == TransactionType.TRANSFER ? targetAmount : amount;
-        limitService.checkTransactionLimit(userId, limitAmount);
         Transaction saved = transactionRepository.save(tx);
-        log.info("TX {} created (Type: {})", saved.getId(), type);
+        log.info("TX {} created (Type: {}, Rate: {})", saved.getId(), type, rate);
         return saved;
     }
 }

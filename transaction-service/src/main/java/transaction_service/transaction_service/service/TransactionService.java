@@ -8,10 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
-import transaction_service.transaction_service.dto.DepositRequestDto;
-import transaction_service.transaction_service.dto.WithdrawRequestDto;
-import transaction_service.transaction_service.dto.TransactionRequestDto;
-import transaction_service.transaction_service.dto.TransactionResponseDto;
+import transaction_service.transaction_service.dto.*;
 import transaction_service.transaction_service.mapper.TransactionMapper;
 import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
@@ -20,6 +17,7 @@ import org.springframework.data.domain.Pageable;
 import transaction_service.transaction_service.service.strategy.FinancialOperationStrategy;
 import transaction_service.transaction_service.service.validate.AccountAccessService;
 import transaction_service.transaction_service.service.validate.FraudValidationService;
+import transaction_service.transaction_service.service.validate.ParallelValidationService;
 import transaction_service.transaction_service.service.validate.TransactionValidationService;
 
 import java.math.BigDecimal;
@@ -43,7 +41,7 @@ public class TransactionService {
     private final AccountOperationService accountOperationService;
     private final TransactionCreationService transactionCreationService;
     private final RetryBackoffService retryBackoffService;
-    private final FraudValidationService fraudValidationService;
+    private final ParallelValidationService parallelValidationService;
 
     public TransactionService(
             TransactionRepository transactionRepository,
@@ -56,7 +54,7 @@ public class TransactionService {
             AccountOperationService accountOperationService,
             TransactionCreationService transactionCreationService,
             RetryBackoffService retryBackoffService,
-            FraudValidationService fraudValidationService
+            ParallelValidationService parallelValidationService
 
     ) {
         this.transactionRepository = transactionRepository;
@@ -73,7 +71,7 @@ public class TransactionService {
         this.accountOperationService = accountOperationService;
         this.transactionCreationService = transactionCreationService;
         this.retryBackoffService = retryBackoffService;
-        this.fraudValidationService = fraudValidationService;
+        this.parallelValidationService = parallelValidationService;
     }
     public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
 
@@ -154,10 +152,12 @@ public class TransactionService {
             TransactionResponseDto txDto = transactionMapper.toDto(tx);
             return txDto;
         }
-        fraudValidationService.validate(userId, amount, accountCreatedAt);
+        ValidationResult validation = parallelValidationService.validate(
+                userId, amount, currency, targetAccountId, type, accountCreatedAt
+        );
         Transaction tx;
         try {
-            tx = transactionCreationService.createTransaction(sourceAccountId, targetAccountId, amount, currency, type, idempotencyKey,userId,category);
+            tx = transactionCreationService.createTransaction(sourceAccountId, targetAccountId, amount, currency, type, idempotencyKey,userId,category,validation.getRate(), validation.getTargetAmount());
         } catch (DataIntegrityViolationException e) {
             log.warn("Idempotency Key Conflict: Another process saved the transaction first. Key: {}", idempotencyKey);
             Transaction conflictTx = transactionRepository.findByIdempotencyKey(idempotencyKey)
