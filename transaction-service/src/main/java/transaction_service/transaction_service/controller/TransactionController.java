@@ -16,6 +16,9 @@ import transaction_service.transaction_service.dto.TransactionResponseDto;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import transaction_service.transaction_service.dto.WithdrawRequestDto;
+import transaction_service.transaction_service.dto.bulk.BulkTransferRequestDto;
+import transaction_service.transaction_service.dto.bulk.BulkTransferResponseDto;
+import transaction_service.transaction_service.service.BulkTransferService;
 import transaction_service.transaction_service.service.ExchangeRateService;
 import transaction_service.transaction_service.service.TransactionService;
 import org.springframework.data.domain.Page;
@@ -29,12 +32,22 @@ import java.math.BigDecimal;
 public class TransactionController {
     private final TransactionService transactionService;
     private final ExchangeRateService exchangeRateService;
+    private final BulkTransferService bulkTransferService;
+
     @PostMapping("/transfers")
     public ResponseEntity<TransactionResponseDto> transfer(@Valid @RequestBody TransactionRequestDto dto,
                                                            @AuthenticationPrincipal AuthenticatedUser user,
                                                            @RequestHeader("Idempotency-Key") String idempotencyKey) {
         TransactionResponseDto response = transactionService.transfer(dto, user.userId(),idempotencyKey);
         return ResponseEntity.ok(response);
+    }
+    @PostMapping("/bulk-transfers")
+    public ResponseEntity<BulkTransferResponseDto> transferBulk(@Valid @RequestBody BulkTransferRequestDto request,
+                                                                @AuthenticationPrincipal AuthenticatedUser user,
+                                                                @RequestHeader("Idempotency-Key") String idempotencyKey){
+        BulkTransferResponseDto response = bulkTransferService.bulkTransfer(request,user.userId(),idempotencyKey);
+        return ResponseEntity.ok(response);
+
     }
     @PostMapping("/deposits")
     public ResponseEntity<TransactionResponseDto> deposit (@Valid @RequestBody DepositRequestDto dto
