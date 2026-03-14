@@ -66,20 +66,7 @@ public class TransactionController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping
-    public ResponseEntity<Page<TransactionResponseDto>> getHistory(
-            @RequestParam("accountId") Long accountId,
-            @RequestParam(value = "page", defaultValue = "0") int page,
-            @RequestParam(value = "size", defaultValue = "10") int size,
-            @AuthenticationPrincipal AuthenticatedUser user) {
 
-
-        size = Math.min(size, 50);
-        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-
-        Page<TransactionResponseDto> history = transactionService.getHistory(accountId, pageable,user.userId());
-        return ResponseEntity.ok(history);
-    }
     @GetMapping("/exchange-preview")
     public ResponseEntity<BigDecimal> previewExchange(
             @RequestParam Currency from,
