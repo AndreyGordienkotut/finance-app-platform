@@ -1,4 +1,4 @@
-package transaction_service.transaction_service;
+package transaction_service.transaction_service.service;
 import core.core.enums.Currency;
 import core.core.exception.BadRequestException;
 import org.junit.jupiter.api.DisplayName;
@@ -9,7 +9,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
-import transaction_service.transaction_service.service.CsvExportService;
 import transaction_service.transaction_service.service.validate.AccountAccessService;
 
 import java.math.BigDecimal;
@@ -69,7 +68,7 @@ class CsvExportServiceTest {
     }
 
     @Test
-    @DisplayName("Empty transactions — only header row")
+    @DisplayName("Empty transactions - only header row")
     void export_emptyTransactions_onlyHeader() {
         when(transactionRepository.findBySourceAccountIdOrTargetAccountId(ACCOUNT_ID, ACCOUNT_ID))
                 .thenReturn(List.of());
@@ -82,7 +81,7 @@ class CsvExportServiceTest {
     }
 
     @Test
-    @DisplayName("TRANSFER tx — all fields present in CSV row")
+    @DisplayName("TRANSFER tx - all fields present in CSV row")
     void export_transferTx_allFieldsPresent() {
         TransactionCategory category = new TransactionCategory();
         category.setName("ENTERTAINMENT");
@@ -104,7 +103,7 @@ class CsvExportServiceTest {
     }
 
     @Test
-    @DisplayName("DEPOSIT tx — sourceAccountId is empty in CSV")
+    @DisplayName("DEPOSIT tx - sourceAccountId is empty in CSV")
     void export_depositTx_sourceAccountIdEmpty() {
         Transaction tx = buildTx(2L, null, 1L, TransactionType.DEPOSIT,
                 Status.COMPLETED, null, null);
@@ -119,7 +118,7 @@ class CsvExportServiceTest {
     }
 
     @Test
-    @DisplayName("WITHDRAW tx — targetAccountId is empty in CSV")
+    @DisplayName("WITHDRAW tx - targetAccountId is empty in CSV")
     void export_withdrawTx_targetAccountIdEmpty() {
         Transaction tx = buildTx(3L, 1L, null, TransactionType.WITHDRAW,
                 Status.COMPLETED, null, null);
@@ -134,7 +133,7 @@ class CsvExportServiceTest {
     }
 
     @Test
-    @DisplayName("Tx without category — category field is empty")
+    @DisplayName("Tx without category - category field is empty")
     void export_noCategory_emptyCategoryField() {
         Transaction tx = buildTx(4L, 1L, 2L, TransactionType.TRANSFER,
                 Status.COMPLETED, null, null);
@@ -149,7 +148,7 @@ class CsvExportServiceTest {
     }
 
     @Test
-    @DisplayName("Multiple transactions — correct row count")
+    @DisplayName("Multiple transactions - correct row count")
     void export_multipleTransactions_correctRowCount() {
         List<Transaction> txs = List.of(
                 buildTx(1L, 1L, 2L, TransactionType.TRANSFER, Status.COMPLETED, null, null),
@@ -168,7 +167,7 @@ class CsvExportServiceTest {
     }
 
     @Test
-    @DisplayName("Error message with comma — wrapped in quotes")
+    @DisplayName("Error message with comma - wrapped in quotes")
     void export_errorWithComma_escapedInCsv() {
         Transaction tx = buildTx(1L, 1L, 2L, TransactionType.TRANSFER,
                 Status.FAILED, null, "Transfer failed, compensation done");
@@ -183,7 +182,7 @@ class CsvExportServiceTest {
     }
 
     @Test
-    @DisplayName("Error message without comma — not wrapped in quotes")
+    @DisplayName("Error message without comma - not wrapped in quotes")
     void export_errorWithoutComma_notEscaped() {
         Transaction tx = buildTx(1L, 1L, 2L, TransactionType.TRANSFER,
                 Status.FAILED, null, "Insufficient funds");
@@ -199,7 +198,7 @@ class CsvExportServiceTest {
     }
 
     @Test
-    @DisplayName("Access denied — throws, repository not called")
+    @DisplayName("Access denied - throws, repository not called")
     void export_accessDenied_repositoryNotCalled() {
         doThrow(new BadRequestException("Access denied"))
                 .when(accountAccessService)
