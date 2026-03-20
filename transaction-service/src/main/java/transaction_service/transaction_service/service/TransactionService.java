@@ -9,6 +9,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import transaction_service.transaction_service.dto.*;
+import transaction_service.transaction_service.event.kafka.TransactionEventPublisher;
 import transaction_service.transaction_service.mapper.TransactionMapper;
 import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
@@ -42,6 +43,7 @@ public class TransactionService {
     private final TransactionCreationService transactionCreationService;
     private final RetryBackoffService retryBackoffService;
     private final ParallelValidationService parallelValidationService;
+    private final TransactionEventPublisher transactionEventPublisher;
 
     public TransactionService(
             TransactionRepository transactionRepository,
@@ -54,7 +56,8 @@ public class TransactionService {
             AccountOperationService accountOperationService,
             TransactionCreationService transactionCreationService,
             RetryBackoffService retryBackoffService,
-            ParallelValidationService parallelValidationService
+            ParallelValidationService parallelValidationService,
+            TransactionEventPublisher transactionEventPublisher
 
     ) {
         this.transactionRepository = transactionRepository;
@@ -72,6 +75,7 @@ public class TransactionService {
         this.transactionCreationService = transactionCreationService;
         this.retryBackoffService = retryBackoffService;
         this.parallelValidationService = parallelValidationService;
+        this.transactionEventPublisher= transactionEventPublisher;
     }
     public TransactionResponseDto transfer(TransactionRequestDto dto, Long userId, String idempotencyKey) {
 
@@ -176,6 +180,7 @@ public class TransactionService {
                 strategies.get(type)
                         .execute(currentTx, sourceAccountId, targetAccountId, tx.getTargetAmount());
                 transactionStateService.updateStatus(currentTx.getId(), Status.COMPLETED, null);
+                transactionEventPublisher.publish(currentTx);
                 return transactionMapper.toDto(transactionRepository.findById(currentTx.getId()).orElseThrow());
 
             } catch (ConflictException e) {
