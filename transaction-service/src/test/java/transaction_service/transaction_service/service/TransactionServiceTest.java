@@ -16,6 +16,7 @@ import transaction_service.transaction_service.dto.TransactionRequestDto;
 import core.core.exception.*;
 import transaction_service.transaction_service.dto.TransactionResponseDto;
 import transaction_service.transaction_service.dto.ValidationResult;
+import transaction_service.transaction_service.event.kafka.TransactionEventPublisher;
 import transaction_service.transaction_service.mapper.TransactionMapper;
 import transaction_service.transaction_service.model.*;
 import transaction_service.transaction_service.repository.TransactionRepository;
@@ -65,6 +66,8 @@ public class TransactionServiceTest {
     private FinancialOperationStrategy withdrawStrategy;
     @Mock
     private ParallelValidationService parallelValidationService;
+    @Mock
+    private TransactionEventPublisher transactionEventPublisher;
 
 
     private TransactionService transactionService;
@@ -99,7 +102,8 @@ public class TransactionServiceTest {
                 accountOperationService,
                 transactionCreationService,
                 retryBackoffService,
-                parallelValidationService
+                parallelValidationService,
+                transactionEventPublisher
         );
 
         transferDto = TransactionRequestDto.builder()
@@ -711,5 +715,63 @@ public class TransactionServiceTest {
 
         verify(transactionCreationService, never())
                 .createTransaction(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+    @Test
+    @DisplayName("After COMPLETED - publish() is called")
+    void transfer_completed_publishCalled() {
+        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(ValidationResult.builder()
+                        .rate(BigDecimal.ONE)
+                        .targetAmount(BigDecimal.valueOf(100))
+                        .build());
+
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+        when(transactionCreationService.createTransaction(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(txCreated);
+        when(transactionRepository.findById(TX_ID))
+                .thenReturn(Optional.of(txCreated));
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
+        when(transactionMapper.toDto(any()))
+                .thenReturn(new TransactionResponseDto());
+
+        transactionService.transfer(transferDto, userId, idempotencyKey);
+
+        verify(transactionEventPublisher).publish(any(Transaction.class));
+    }
+
+    @Test
+    @DisplayName("If transaction FAILED - publish() is NOT called")
+    void transfer_failed_publishNotCalled() {
+        when(parallelValidationService.validate(any(), any(), any(), any(), any(), any()))
+                .thenReturn(ValidationResult.builder()
+                        .rate(BigDecimal.ONE)
+                        .targetAmount(BigDecimal.valueOf(100))
+                        .build());
+
+        when(transactionRepository.findByIdempotencyKey(idempotencyKey))
+                .thenReturn(Optional.empty());
+        when(transactionCreationService.createTransaction(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(txCreated);
+        when(transactionRepository.findById(TX_ID))
+                .thenReturn(Optional.of(txCreated));
+        when(accountAccessService.validateAccountOwnership(1L, userId))
+                .thenReturn(fromAccount);
+        when(accountOperationService.getAccountById(2L))
+                .thenReturn(toAccount);
+
+        doThrow(new BadRequestException("Insufficient funds"))
+                .when(transferStrategy)
+                .execute(any(), any(), any(), any());
+
+        assertThrows(BadRequestException.class,
+                () -> transactionService.transfer(transferDto, userId, idempotencyKey));
+
+        verify(transactionEventPublisher, never()).publish(any());
     }
 }
