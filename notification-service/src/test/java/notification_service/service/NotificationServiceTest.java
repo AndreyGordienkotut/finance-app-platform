@@ -4,7 +4,9 @@ import core.core.dto.TransactionKafkaEvent;
 import notification_service.model.Channel;
 import notification_service.model.Notification;
 import notification_service.model.NotificationStatus;
+import notification_service.model.UserTelegram;
 import notification_service.repository.NotificationRepository;
+import notification_service.repository.UserTelegramRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -31,6 +34,10 @@ class NotificationServiceTest {
 
     @Mock
     private NotificationRepository notificationRepository;
+    @Mock
+    private TelegramService telegramService;
+    @Mock
+    private UserTelegramRepository userTelegramRepository;
 
     @InjectMocks
     private NotificationService notificationService;
@@ -128,5 +135,55 @@ class NotificationServiceTest {
         notificationService.processTransactionNotification(event);
 
         verify(notificationRepository, times(2)).save(any());
+    }
+    @Test
+    @DisplayName("Telegram linked sendMessage called")
+    void process_telegramLinked_sendsCalled() {
+        UserTelegram userTelegram = UserTelegram.builder()
+                .userId(10L)
+                .chatId(123456L)
+                .build();
+        when(userTelegramRepository.findByUserId(10L))
+                .thenReturn(Optional.of(userTelegram));
+
+        notificationService.processTransactionNotification(buildEvent());
+
+        verify(telegramService).sendMessage(eq(123456L), anyString());
+    }
+
+    @Test
+    @DisplayName("Telegram not linked sendMessage NOT called")
+    void process_telegramNotLinked_sendNotCalled() {
+        when(userTelegramRepository.findByUserId(10L))
+                .thenReturn(Optional.empty());
+
+        notificationService.processTransactionNotification(buildEvent());
+
+        verify(telegramService, never()).sendMessage(any(), any());
+    }
+
+    @Test
+    @DisplayName("Telegram throws status FAILED")
+    void process_telegramThrows_statusFailed() {
+        UserTelegram userTelegram = UserTelegram.builder()
+                .userId(10L)
+                .chatId(123456L)
+                .build();
+        when(userTelegramRepository.findByUserId(10L))
+                .thenReturn(Optional.of(userTelegram));
+        doThrow(new RuntimeException("Telegram error"))
+                .when(telegramService).sendMessage(any(), any());
+
+        List<NotificationStatus> statuses = new ArrayList<>();
+        when(notificationRepository.save(any())).thenAnswer(inv -> {
+            Notification n = inv.getArgument(0);
+            statuses.add(n.getStatus());
+            return n;
+        });
+
+        notificationService.processTransactionNotification(buildEvent());
+
+        assertEquals(NotificationStatus.PENDING, statuses.get(0));
+        assertEquals(NotificationStatus.FAILED, statuses.get(1));
     }
 }
