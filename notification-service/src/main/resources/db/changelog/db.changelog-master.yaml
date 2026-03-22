@@ -1,3 +1,5 @@
 databaseChangeLog:
   - include:
       file: db/changelog/16.03.26-initial-schema.yaml
+  - include:
+      file: db/changelog/21.03.26-changelog.yaml

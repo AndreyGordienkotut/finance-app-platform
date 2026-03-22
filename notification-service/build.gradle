@@ -9,6 +9,7 @@ dependencies {
 	implementation project(':core')
 	//liquibase
 	implementation 'org.liquibase:liquibase-core'
+	implementation 'com.github.pengrad:java-telegram-bot-api:7.11.0'
 }
 
 tasks.named('test') {

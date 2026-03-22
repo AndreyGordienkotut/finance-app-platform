@@ -47,3 +47,6 @@ application:
       refresh-token:
         expiration: ${JWT_REFRESH_EXPIRATION}
       cookie-name: jwt_token
+telegram:
+  bot:
+    token: ${TELEGRAM_BOT_TOKEN}
