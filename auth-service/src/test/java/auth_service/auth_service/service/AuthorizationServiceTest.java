@@ -3,12 +3,12 @@ import auth_service.auth_service.dto.AuthenticationRequestDto;
 import auth_service.auth_service.dto.AuthenticationResponseDto;
 import auth_service.auth_service.dto.RefreshTokenRequestDto;
 import auth_service.auth_service.mapper.AuthMapper;
-import auth_service.auth_service.model.EmailVerification;
+import auth_service.auth_service.model.TelegramVerification;
+import auth_service.auth_service.repository.TelegramVerificationRepository;
 import core.core.exception.*;
 import auth_service.auth_service.dto.RegisterRequestDto;
 import auth_service.auth_service.model.RefreshToken;
 import auth_service.auth_service.model.Users;
-import auth_service.auth_service.repository.EmailVerificationTokensRepository;
 import auth_service.auth_service.repository.UsersRepository;
 import core.core.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +25,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -44,7 +46,7 @@ public class AuthorizationServiceTest {
     @Mock
     private AuthenticationManager authenticationManager;
     @Mock
-    private EmailVerificationTokensRepository emailVerificationTokensRepository;
+    private TelegramVerificationRepository telegramVerificationRepository;
     @Mock
     private RefreshTokenService refreshTokenService;
     @InjectMocks
@@ -67,11 +69,12 @@ public class AuthorizationServiceTest {
                 .userId(1L)
                 .username("cool_user")
                 .email("test@mail.com")
+                .verificationCode("847291")
                 .build();
     }
 
     @Test
-    @DisplayName("Register: Should encode password and save verification token")
+    @DisplayName("Register: Success saves user and telegram verification")
     void register_Success_FullSideEffects() {
         when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
         when(passwordEncoder.encode("pass123")).thenReturn("hash_pass");
@@ -84,16 +87,44 @@ public class AuthorizationServiceTest {
 
         when(jwtService.generateToken(any(UserDetails.class), anyLong())).thenReturn("jwt");
         when(refreshTokenService.createRefreshToken(anyLong())).thenReturn(RefreshToken.builder().token("rf").build());
-        when(authMapper.toAuthResponse(any(Users.class), anyString(), anyString()))
+        when(authMapper.toAuthResponse(any(Users.class), anyString(), anyString(), anyString()))
                 .thenReturn(authResponseDto);
-        authorizationService.register(regDto);
+
+        AuthenticationResponseDto result = authorizationService.register(regDto);
 
         ArgumentCaptor<Users> userCaptor = ArgumentCaptor.forClass(Users.class);
         verify(userRepository).save(userCaptor.capture());
         assertEquals("hash_pass", userCaptor.getValue().getPassword());
-        assertEquals("test@mail.com", userCaptor.getValue().getUsername());
-        verify(emailVerificationTokensRepository).save(any(EmailVerification.class));
+        assertFalse(userCaptor.getValue().isVerified());
+
+        verify(telegramVerificationRepository).save(any(TelegramVerification.class));
+        assertNotNull(result.getVerificationCode());
     }
+    @Test
+    @DisplayName("Register: verification code is 6 digits")
+    void register_VerificationCode_Is6Digits() {
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
+        when(userRepository.save(any())).thenAnswer(i -> {
+            Users u = i.getArgument(0);
+            u.setId(1L);
+            return u;
+        });
+        when(jwtService.generateToken(any(), anyLong())).thenReturn("jwt");
+        when(refreshTokenService.createRefreshToken(anyLong()))
+                .thenReturn(RefreshToken.builder().token("rf").build());
+
+        ArgumentCaptor<TelegramVerification> captor =
+                ArgumentCaptor.forClass(TelegramVerification.class);
+        when(authMapper.toAuthResponse(any(), anyString(), anyString(), anyString()))
+                .thenReturn(authResponseDto);
+
+        authorizationService.register(regDto);
+
+        verify(telegramVerificationRepository).save(captor.capture());
+        String code = captor.getValue().getCode();
+        assertTrue(code.matches("\\d{6}"));
+    }
+
     @Test
     @DisplayName("Register: Should not save anything if user already exists")
     void register_DuplicateEmail_SideEffects() {
@@ -104,7 +135,7 @@ public class AuthorizationServiceTest {
         );
 
         verify(userRepository, never()).save(any());
-        verify(emailVerificationTokensRepository, never()).save(any());
+        verify(telegramVerificationRepository, never()).save(any());
         verify(refreshTokenService, never()).createRefreshToken(anyLong());
     }
     @Test
@@ -114,7 +145,7 @@ public class AuthorizationServiceTest {
         when(userRepository.findByEmail("test@mail.com")).thenReturn(Optional.of(testUser));
         when(jwtService.generateToken(any(UserDetails.class), anyLong())).thenReturn("jwt");
         when(refreshTokenService.createRefreshToken(1L)).thenReturn(RefreshToken.builder().token("rf").build());
-        when(authMapper.toAuthResponse(any(Users.class), anyString(), anyString()))
+        when(authMapper.toAuthResponse(any(Users.class), anyString(), anyString(), isNull()))
                 .thenReturn(authResponseDto);
         var response = authorizationService.authenticate(authDto);
 
@@ -122,16 +153,34 @@ public class AuthorizationServiceTest {
         assertEquals("jwt", response.getToken());
         verify(authenticationManager).authenticate(any());
     }
+    @Test
+    @DisplayName("Authenticate: verificationCode is null in response")
+    void authenticate_VerificationCode_IsNull() {
+        AuthenticationRequestDto authDto =
+                new AuthenticationRequestDto("test@mail.com", "pass123");
+        when(userRepository.findByEmail("test@mail.com")).thenReturn(Optional.of(testUser));
+        when(jwtService.generateToken(any(), anyLong())).thenReturn("jwt");
+        when(refreshTokenService.createRefreshToken(anyLong()))
+                .thenReturn(RefreshToken.builder().token("rf").build());
+
+        ArgumentCaptor<String> codeCaptor = ArgumentCaptor.forClass(String.class);
+        when(authMapper.toAuthResponse(any(), anyString(), anyString(), codeCaptor.capture()))
+                .thenReturn(authResponseDto);
+
+        authorizationService.authenticate(authDto);
+
+        assertNull(codeCaptor.getValue());
+    }
 
     @Test
-    @DisplayName("Authenticate: Should throw BadRequest if email not verified")
+    @DisplayName("Authenticate: Should throw BadRequest if not verified")
     void authenticate_NotVerified_ThrowsException() {
         testUser.setVerified(false);
         when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(testUser));
 
         assertThrows(BadRequestException.class, () ->
-                authorizationService.authenticate(new AuthenticationRequestDto("test@mail.com", "123"))
-        );
+                authorizationService.authenticate(
+                        new AuthenticationRequestDto("test@mail.com", "123")));
     }
 
     @Test
@@ -154,6 +203,58 @@ public class AuthorizationServiceTest {
                 authorizationService.authenticate(new AuthenticationRequestDto("fake@mail.com", "123"))
         );
     }
+    @Test
+    @DisplayName("verifyByCode: Success sets verified=true, returns userId")
+    void verifyByCode_Success_ReturnsUserId() {
+        TelegramVerification verification = TelegramVerification.builder()
+                .code("847291")
+                .used(false)
+                .expiresAt(Instant.now().plus(24, ChronoUnit.HOURS))
+                .user(testUser)
+                .build();
+
+        when(telegramVerificationRepository.findByCodeAndUsedFalse("847291"))
+                .thenReturn(Optional.of(verification));
+
+        Long userId = authorizationService.verifyByCode("847291");
+
+        assertEquals(1L, userId);
+        assertTrue(verification.isUsed());
+        assertTrue(testUser.isVerified());
+        verify(telegramVerificationRepository).save(verification);
+        verify(userRepository).save(testUser);
+    }
+
+    @Test
+    @DisplayName("verifyByCode: Invalid code throws BadRequestException")
+    void verifyByCode_InvalidCode_Throws() {
+        when(telegramVerificationRepository.findByCodeAndUsedFalse("000000"))
+                .thenReturn(Optional.empty());
+
+        assertThrows(BadRequestException.class, () ->
+                authorizationService.verifyByCode("000000"));
+    }
+
+    @Test
+    @DisplayName("verifyByCode: Expired code throws BadRequestException")
+    void verifyByCode_ExpiredCode_Throws() {
+        Users unverifiedUser = new Users();
+        unverifiedUser.setId(2L);
+        unverifiedUser.setVerified(false);
+        TelegramVerification verification = TelegramVerification.builder()
+                .code("847291")
+                .used(false)
+                .expiresAt(Instant.now().minus(1, ChronoUnit.HOURS))
+                .user(unverifiedUser)
+                .build();
+
+        when(telegramVerificationRepository.findByCodeAndUsedFalse("847291"))
+                .thenReturn(Optional.of(verification));
+
+        assertThrows(BadRequestException.class, () ->
+                authorizationService.verifyByCode("847291"));
+        assertFalse(unverifiedUser.isVerified());
+    }
 
     @Test
     @DisplayName("Refresh: Should maintain consistent Claims (userId)")
@@ -161,7 +262,7 @@ public class AuthorizationServiceTest {
         RefreshToken rf = RefreshToken.builder().token("old_rf").user(testUser).build();
         when(refreshTokenService.findByToken("old_rf")).thenReturn(Optional.of(rf));
         when(jwtService.generateToken(any(UserDetails.class), anyLong())).thenReturn("jwt");
-        when(authMapper.toAuthResponse(any(Users.class), anyString(), anyString()))
+        when(authMapper.toAuthResponse(any(Users.class), anyString(), anyString(), isNull()))
                 .thenReturn(authResponseDto);
         authorizationService.refreshToken(new RefreshTokenRequestDto("old_rf"));
         ArgumentCaptor<Long> userIdCaptor = ArgumentCaptor.forClass(Long.class);
@@ -199,7 +300,7 @@ public class AuthorizationServiceTest {
         RefreshToken rf = RefreshToken.builder().token("existing_refresh_token").user(testUser).build();
         when(refreshTokenService.findByToken(anyString())).thenReturn(Optional.of(rf));
         when(jwtService.generateToken(any(UserDetails.class), anyLong())).thenReturn("jwt");
-        when(authMapper.toAuthResponse(any(Users.class), anyString(), anyString()))
+        when(authMapper.toAuthResponse(any(), anyString(), anyString(), isNull()))
                 .thenReturn(authResponseDto);
         authorizationService.refreshToken(new RefreshTokenRequestDto("existing_refresh_token"));
 
