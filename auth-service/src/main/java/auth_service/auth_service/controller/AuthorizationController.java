@@ -9,10 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -35,5 +32,10 @@ public class AuthorizationController {
     public ResponseEntity<AuthenticationResponseDto> logout(@RequestBody RefreshTokenRequestDto request) {
         userService.logout(request.getRefreshToken());
         return ResponseEntity.noContent().build();
+    }
+    @PostMapping("/verify")
+    public ResponseEntity<Long> verify(@RequestParam String code) {
+        Long userId = userService.verifyByCode(code);
+        return ResponseEntity.ok(userId);
     }
 }

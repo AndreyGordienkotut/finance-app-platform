@@ -5,13 +5,13 @@ import auth_service.auth_service.dto.AuthenticationResponseDto;
 import auth_service.auth_service.dto.RefreshTokenRequestDto;
 import auth_service.auth_service.dto.RegisterRequestDto;
 import auth_service.auth_service.mapper.AuthMapper;
+import auth_service.auth_service.model.TelegramVerification;
+import auth_service.auth_service.repository.TelegramVerificationRepository;
 import core.core.exception.*;
 import core.core.security.JwtService;
-import auth_service.auth_service.model.EmailVerification;
 import auth_service.auth_service.model.RefreshToken;
 import auth_service.auth_service.model.Role;
 import auth_service.auth_service.model.Users;
-import auth_service.auth_service.repository.EmailVerificationTokensRepository;
 import auth_service.auth_service.repository.UsersRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Random;
 import java.util.UUID;
 
 @Service
@@ -34,7 +35,7 @@ public class AuthorizationService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
-    private final EmailVerificationTokensRepository emailVerificationTokensRepository;
+    private final TelegramVerificationRepository telegramVerificationRepository;
     private final RefreshTokenService refreshTokenService;
 
     private final AuthMapper authMapper;
@@ -43,26 +44,28 @@ public class AuthorizationService {
         if(userRepository.findByEmail(registerRequestDto.getEmail()).isPresent()) {
             throw new UserAlreadyExistsException("User with this email already exists.");
         }
-        Users user = new Users();
-        user.setEmail(registerRequestDto.getEmail());
-        user.setPassword(passwordEncoder.encode(registerRequestDto.getPassword()));
-        user.setUsername(registerRequestDto.getUsername()); //change
-        user.setRole(Role.CLIENT);
-        user.setVerified(false);
-        Users savedUser = userRepository.save(user);
-        String token = UUID.randomUUID().toString();
-        EmailVerification emailVerificationTokens = EmailVerification.builder()
-                .user(savedUser)
-                .token(token)
-                .used(false)
-                .expiryAt(Instant.now().plus(24, ChronoUnit.HOURS))
+        Users user = Users.builder()
+                .email(registerRequestDto.getEmail())
+                .password(passwordEncoder.encode(registerRequestDto.getPassword()))
+                .username(registerRequestDto.getUsername())
+                .role(Role.CLIENT)
+                .verified(false)
                 .build();
-        emailVerificationTokensRepository.save(emailVerificationTokens);
-//        Map<String, Object> extraClaims = Map.of("userId", savedUser.getId());
+        Users savedUser = userRepository.save(user);
+        String code = generateVerificationCode();
+
+        TelegramVerification verification = TelegramVerification.builder()
+                .user(savedUser)
+                .code(code)
+                .used(false)
+                .expiresAt(Instant.now().plus(24, ChronoUnit.HOURS))
+                .build();
+        telegramVerificationRepository.save(verification);
+        log.info("User {} registered. Verification code: {}", savedUser.getEmail(), code);
         String jwtAccessToken = jwtService.generateToken(user, user.getId());
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(savedUser.getId());
 
-        return authMapper.toAuthResponse(savedUser, jwtAccessToken, refreshToken.getToken());
+        return authMapper.toAuthResponse(savedUser, jwtAccessToken, refreshToken.getToken(),code);
     }
     @Transactional
     public AuthenticationResponseDto authenticate(AuthenticationRequestDto authenticationRequestDto) {
@@ -86,7 +89,7 @@ public class AuthorizationService {
         String jwtAccessToken = jwtService.generateToken(user, user.getId());
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getId());
 
-        return authMapper.toAuthResponse(user, jwtAccessToken, refreshToken.getToken());
+        return authMapper.toAuthResponse(user, jwtAccessToken, refreshToken.getToken(),null);
     }
     @Transactional
     public AuthenticationResponseDto refreshToken(RefreshTokenRequestDto request) {
@@ -98,23 +101,36 @@ public class AuthorizationService {
         Users user = refreshToken.getUser();
         String newAccessToken = jwtService.generateToken(user, user.getId());
 
-        return authMapper.toAuthResponse(user, newAccessToken, refreshToken.getToken());
+        return authMapper.toAuthResponse(user, newAccessToken, refreshToken.getToken(),null);
     }
     @Transactional
     public void logout(String refreshToken) {
         refreshTokenService.findByToken(refreshToken)
                 .ifPresent(refreshTokenService::delete);
     }
+    @Transactional
+    public Long  verifyByCode(String code) {
+        TelegramVerification verification = telegramVerificationRepository
+                .findByCodeAndUsedFalse(code)
+                .orElseThrow(() -> new BadRequestException("Invalid or expired verification code."));
 
-//    private AuthenticationResponseDto createAuthResponse(Users user, String accessToken, String refreshToken) {
-//        return AuthenticationResponseDto.builder()
-//                .token(accessToken)
-//                .refreshToken(refreshToken)
-//                .userId(user.getId())
-//                .username(user.getUsername())
-//                .email(user.getEmail())
-//                .build();
-//    }
+        if (verification.getExpiresAt().isBefore(Instant.now())) {
+            throw new BadRequestException("Verification code has expired.");
+        }
+
+        verification.setUsed(true);
+        verification.getUser().setVerified(true);
+
+        telegramVerificationRepository.save(verification);
+        userRepository.save(verification.getUser());
+
+        log.info("User {} verified successfully", verification.getUser().getEmail());
+        return verification.getUser().getId();
+    }
+
+    private String generateVerificationCode() {
+        return String.format("%06d", new Random().nextInt(999999));
+    }
 
 
 

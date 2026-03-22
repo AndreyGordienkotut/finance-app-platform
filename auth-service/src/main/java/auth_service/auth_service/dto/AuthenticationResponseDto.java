@@ -20,4 +20,5 @@ public class AuthenticationResponseDto {
     private String username;
 
     private String email;
+    private String verificationCode;
 }

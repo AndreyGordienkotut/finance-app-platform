@@ -1,3 +1,5 @@
 databaseChangeLog:
   - include:
       file: db/changelog/21.02.26-initial-schema.sql
+  - include:
+      file: db/changelog/21.03.26-changelog.sql
