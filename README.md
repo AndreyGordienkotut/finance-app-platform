@@ -151,10 +151,12 @@ CLAUDE_API_KEY=your_token
 2. Запуск усіх сервісів та інфраструктури:
 docker-compose up -d
 
-3. Після запуску Swagger доступний за адресами сервісів:\
+3. Після запуску Swagger доступний за адресами сервісів:
+
+
 AuthService:
 http://localhost:8080/swagger-ui.html
-4. 
+
 AccountService:
 http://localhost:8081/swagger-ui.html 
 
