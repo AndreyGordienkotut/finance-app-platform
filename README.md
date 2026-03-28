@@ -17,6 +17,7 @@
   - bulkTransferService -  переказ на кілька рахунків одночасно 
   - CsvExportService - Експорт історії транзакцій у CSV
 - notification-service - Kafka consumer та Telegram сповіщення
+
 Комунікація між сервісами реалізована через REST + OpenFeign, а безпека забезпечується через прокидання JWT-токенів між запитами.
 
 ## Основний функціонал 
@@ -121,17 +122,25 @@
 ### Необіхдні змінні середовища(додати .env файл у корень проекту)
 
 JWT_SECRET=your_secret
+
 JWT_EXPIRATION=86400000
+
 JWT_REFRESH_EXPIRATION=604800000
 
 DB_URL_AUTH=jdbc:mysql://db:3306/auth_service
+
 DB_URL_ACC=jdbc:mysql://db:3306/account_service
+
 DB_URL_TRAN=jdbc:mysql://db:3306/transaction_service
+
 DB_URL_NOTIFICATION=jdbc:mysql://db:3306/notification_service
+
 DB_USERNAME=your_username
+
 DB_PASSWORD=your_password
 
 TELEGRAM_BOT_TOKEN=your_token
+
 CLAUDE_API_KEY=your_token
 
 ### Збірка та запуск 
@@ -145,10 +154,13 @@ docker-compose up -d
 3. Після запуску Swagger доступний за адресами сервісів:\
 AuthService:
 http://localhost:8080/swagger-ui.html
+4. 
 AccountService:
 http://localhost:8081/swagger-ui.html 
+
 TransactionService:
 http://localhost:8082/swagger-ui.html
+
 Kafka UI:
 http://localhost:8090
 
