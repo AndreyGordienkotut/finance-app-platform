@@ -48,3 +48,7 @@ application:
       refresh-token:
         expiration: ${JWT_REFRESH_EXPIRATION}
       cookie-name: jwt_token
+
+claude:
+  api:
+    key: ${CLAUDE_API_KEY}

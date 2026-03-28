@@ -9,9 +9,11 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import transaction_service.transaction_service.dto.AiSummaryResponse;
 import transaction_service.transaction_service.dto.CategoryStatDto;
 import transaction_service.transaction_service.dto.TopCategoryResponse;
 import transaction_service.transaction_service.dto.TotalSpentResponse;
+import transaction_service.transaction_service.service.AiAnalyticsService;
 import transaction_service.transaction_service.service.AnalyticsService;
 
 import java.time.Instant;
@@ -23,6 +25,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AnalyticsController {
     private final AnalyticsService analyticsService;
+    private final AiAnalyticsService aiAnalyticsService;
 
     @GetMapping("/total")
     public ResponseEntity<TotalSpentResponse> getTotalSpent(
@@ -47,6 +50,11 @@ public class AnalyticsController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant toDate) {
 
         return ResponseEntity.ok(analyticsService.getCategoryStats(user.userId(), fromDate, toDate));
+    }
+    @GetMapping("/ai-summary")
+    public ResponseEntity<AiSummaryResponse> getAiSummary(
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        return ResponseEntity.ok(aiAnalyticsService.getSummary(user.userId()));
     }
 
 
