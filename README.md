@@ -16,6 +16,7 @@
   - category-service - створення та валідація категорій витрат
   - bulkTransferService -  переказ на кілька рахунків одночасно 
   - CsvExportService - Експорт історії транзакцій у CSV
+- notification-service - Kafka consumer та Telegram сповіщення
 Комунікація між сервісами реалізована через REST + OpenFeign, а безпека забезпечується через прокидання JWT-токенів між запитами.
 
 Основний функціонал 
@@ -35,7 +36,6 @@ Account Service
 - Підтримка кількох валют
 - Зміна статусу рахунку (ACTIVE / CLOSED)
 - Перевірка прав доступу до рахунків
-- Інтеграція з transaction-service
 
 Transaction Service
 
@@ -61,7 +61,12 @@ Transaction Service
 - Робота з декількома валютами
 - Інтеграція з exchange-rate-service
 - Cache eviction аналітичних даних після мутацій
+- AI аналіз витрат через Claude API
 
+Notification Service
+- Kafka consumer для подій транзакцій
+- Telegram бот для верифікації акаунту та сповіщень
+- Збереження історії сповіщень в БД
 
 Analytics Service
 
@@ -108,8 +113,27 @@ Exchange Rate Service
 - Liquibase
 - Docker та Docker Compose
 - MapStruct
+- Telegram Bot API
+- Claude AI API
 
 Запуск та розгортання
+
+Необіхдні змінні середовища(додати .env файл у корень проекту)
+
+JWT_SECRET=your_secret
+JWT_EXPIRATION=86400000
+JWT_REFRESH_EXPIRATION=604800000
+
+DB_URL_AUTH=jdbc:mysql://db:3306/auth_service
+DB_URL_ACC=jdbc:mysql://db:3306/account_service
+DB_URL_TRAN=jdbc:mysql://db:3306/transaction_service
+DB_URL_NOTIFICATION=jdbc:mysql://db:3306/notification_service
+DB_USERNAME=your_username
+DB_PASSWORD=your_password
+
+TELEGRAM_BOT_TOKEN=your_token
+CLAUDE_API_KEY=your_token
+
 Проєкт повністю контейнеризований і готовий до запуску
 1. Збірка проєкта:
 ./gradlew build
@@ -123,7 +147,16 @@ http://localhost:8080/swagger-ui.html
 AccountService:
 http://localhost:8081/swagger-ui.html 
 TransactionService:
-http://localhost:8082/swagger-ui.html 
+http://localhost:8082/swagger-ui.html
+Kafka UI:
+http://localhost:8090
+
+Верифікація через Telegram
+
+1. Зареєструйся → отримай 6-значний код у відповіді
+2. Знайди бота в Telegram → `/start`
+3. Введи код верифікації
+4. Акаунт верифіковано
 
 Додаткова інформація
 - Проєкт орієнтований на продакшн-підхід
