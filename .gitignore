@@ -41,3 +41,10 @@ bin/
 ### Mac OS ###
 .DS_Store
 .env
+
+# Cursor AI (personal settings, not for team)
+.cursor/
+.cursorignore
+.cursorrules
+
+postman.json
